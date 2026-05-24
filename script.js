@@ -361,10 +361,59 @@ function buildEventExportStoryElement(event) {
   return root;
 }
 
-function getEventShareUrl(eventId) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("event", eventId);
-  return url.toString();
+function getAppVkUrl() {
+  const appId = window.APP_CONFIG?.VK_APP_ID || 54607109;
+  return `https://vk.com/app${appId}`;
+}
+
+function formatShareDates(schedules) {
+  if (!schedules.length) return "дата не указана";
+  return schedules
+    .map((item) => formatDate(item.date))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatShareTimes(schedules) {
+  if (!schedules.length) return "время не указано";
+  return schedules
+    .map((item) => {
+      if (!item.time) return "весь день";
+      return item.timeEnd ? `${item.time}–${item.timeEnd}` : item.time;
+    })
+    .join(", ");
+}
+
+function formatShareMultilineField(text) {
+  const items = textToList(text);
+  if (!items.length) return "—";
+  if (items.length === 1) return items[0];
+  return items.map((item) => `• ${item}`).join("\n");
+}
+
+function buildEventShareText(event) {
+  const schedules = getEventSchedules(event);
+  const title = event.title || "Мероприятие";
+  const dates = formatShareDates(schedules);
+  const times = formatShareTimes(schedules);
+  const description = (event.description || "").trim() || "—";
+  const level = formatLevelLabel(event.level) || "—";
+  const functionality = formatShareMultilineField(event.functionality);
+  const conditions = formatShareMultilineField(event.conditions);
+  const chatUrl = VkAuth.normalizeLink(event.buttonUrl) || "—";
+  const appUrl = getAppVkUrl();
+
+  return [
+    `📌 ${title} | ${dates} | ${times} 📌`,
+    description,
+    `Уровень: ${level}`,
+    "Функционал:",
+    functionality,
+    "Условия:",
+    conditions,
+    `Информационный чат: ${chatUrl}`,
+    `Календарь мероприятий: ${appUrl}`,
+  ].join("\n");
 }
 
 function setSubtitle(text) {
@@ -594,7 +643,14 @@ function bindEventCardActions(container) {
 
   container.querySelectorAll("[data-action=share]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      VkAuth.shareLink(getEventShareUrl(btn.dataset.id));
+      const event = events.find(
+        (item) => String(item.id) === String(btn.dataset.id)
+      );
+      if (!event) return;
+      VkAuth.shareEvent({
+        text: buildEventShareText(event),
+        link: getAppVkUrl(),
+      });
     });
   });
 

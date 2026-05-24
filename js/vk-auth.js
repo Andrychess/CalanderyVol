@@ -248,12 +248,21 @@ const VkAuth = {
     localStorage.setItem(key, value);
   },
 
-  async shareLink(url) {
-    if (!url) return;
+  async shareEvent({ text, link }) {
+    const message = (text || "").trim();
+    if (!message) return;
+
+    const shareLink =
+      link ||
+      (window.APP_CONFIG?.VK_APP_ID
+        ? `https://vk.com/app${window.APP_CONFIG.VK_APP_ID}`
+        : "");
 
     if (this.bridge && this.isVkEnvironment) {
       try {
-        await this.bridge.send("VKWebAppShare", { link: url });
+        const params = { text: message.slice(0, 4000) };
+        if (shareLink) params.link = shareLink;
+        await this.bridge.send("VKWebAppShare", params);
         return;
       } catch (e) {
         console.warn("VKWebAppShare:", e);
@@ -261,10 +270,10 @@ const VkAuth = {
     }
 
     try {
-      await navigator.clipboard.writeText(url);
-      alert("Ссылка скопирована в буфер обмена");
+      await navigator.clipboard.writeText(message);
+      alert("Текст скопирован — вставьте в сообщение или чат");
     } catch {
-      prompt("Скопируйте ссылку:", url);
+      prompt("Скопируйте текст:", message);
     }
   },
 };
