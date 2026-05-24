@@ -333,7 +333,7 @@ function renderEvents() {
               <p class="event-datetime">${escapeHtml(formatDate(event.date))} · ${escapeHtml(formatTimeRange(event))}</p>
               <p class="event-location">📍 ${escapeHtml(event.location)}</p>
             </div>
-            <button type="button" class="favorite-btn ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
+            <button type="button" class="favorite-btn no-export ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
           </div>
 
           <div class="badge-row">
@@ -365,16 +365,17 @@ function renderEvents() {
               : ""
           }
 
-          <div class="card-actions">
+          <div class="card-actions no-export">
             <button type="button" class="join-btn" data-url="${escapeHtml(event.buttonUrl)}">
               ${escapeHtml(event.buttonLabel || "Перейти")}
             </button>
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
+            <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Сохранить PNG</button>
           </div>
 
           ${
             isAdmin
-              ? `<div class="edit-buttons">
+              ? `<div class="edit-buttons no-export">
                   <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
                   <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
                 </div>`
@@ -392,6 +393,22 @@ function renderEvents() {
   container.querySelectorAll("[data-action=share]").forEach((btn) => {
     btn.addEventListener("click", () => {
       VkAuth.shareLink(getEventShareUrl(btn.dataset.id));
+    });
+  });
+
+  container.querySelectorAll("[data-action=export-png]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Создаём PNG…";
+      try {
+        await CardPngExport.exportCard(btn.dataset.id, btn.dataset.title);
+      } catch (error) {
+        alert(error.message || "Не удалось сохранить PNG");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
     });
   });
 
@@ -512,7 +529,27 @@ async function handleFormSubmit(event) {
     }
 
     await saveEvents();
+    await reloadEventsFromStorage();
     showModal(false);
+
+    const isVisible = getFilteredEvents().some(
+      (item) => item.id === eventData.id
+    );
+
+    if (!isVisible && isEventPast(eventData) && isAdmin) {
+      const openPast = confirm(
+        "Мероприятие сохранено, но дата уже в прошлом — в основном списке его не видно.\n\nОткрыть «Прошедшие мероприятия»?"
+      );
+      if (openPast) {
+        filterState.showPast = true;
+        updateAdminUi();
+      }
+    } else if (!isVisible) {
+      alert(
+        "Мероприятие сохранено. Если его не видно — сбросьте поиск, фильтр уровня или «Избранное»."
+      );
+    }
+
     renderEvents();
   } catch (error) {
     setFormError(error.message || "Ошибка сохранения");
@@ -528,6 +565,7 @@ async function deleteEvent(eventId) {
   try {
     events = events.filter((item) => item.id !== eventId);
     await saveEvents();
+    await reloadEventsFromStorage();
     renderEvents();
   } catch (error) {
     alert(error.message || "Ошибка удаления");

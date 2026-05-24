@@ -52,6 +52,7 @@
 
                 <label class="field-label">Дата *</label>
                 <input type="date" id="eventDate" required>
+                <p class="field-hint">Прошедшие даты сохраняются, но видны только в «Прошедшие мероприятия».</p>
 
                 <label class="field-label">Время начала *</label>
                 <input type="time" id="eventTime" required>
@@ -99,8 +100,10 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="js/jsonbox.js"></script>
     <script src="js/vk-auth.js"></script>
+    <script src="js/export-png.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
