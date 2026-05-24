@@ -57,25 +57,32 @@ const VkAuth = {
     }
   },
 
+  /**
+   * Вызов VK API через Bridge (без CORS). Прямой fetch к api.vk.com из mini app запрещён.
+   */
   async vkApi(method, params, accessToken) {
-    const url = new URL(`https://api.vk.com/method/${method}`);
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
-    });
-    url.searchParams.set("access_token", accessToken);
-    url.searchParams.set("v", VK_API_VERSION);
-
-    const response = await fetch(url.toString());
-    const data = await response.json();
-
-    if (data.error) {
-      console.warn(`VK API ${method}:`, data.error);
+    if (!this.bridge || !this.isVkEnvironment) {
       return null;
     }
 
-    return data.response;
+    const apiParams = { ...params, access_token: accessToken, v: VK_API_VERSION };
+
+    try {
+      const data = await this.bridge.send("VKWebAppCallAPIMethod", {
+        method,
+        params: apiParams,
+      });
+
+      if (data?.error) {
+        console.warn(`VK API ${method}:`, data.error);
+        return null;
+      }
+
+      return data?.response ?? data;
+    } catch (e) {
+      console.warn(`VKWebAppCallAPIMethod ${method}:`, e);
+      return null;
+    }
   },
 
   isLeaderRole(role) {
@@ -165,18 +172,23 @@ const VkAuth = {
       const accessToken = await this.getGroupsAccessToken(appId);
       const userId = await this.getCurrentUserId();
 
+      const viaGetById = await this.hasLeaderRoleViaGetById(
+        accessToken,
+        groupId
+      );
+      if (viaGetById) {
+        return true;
+      }
+
       if (userId) {
-        const viaManagers = await this.hasLeaderRoleViaManagers(
+        return await this.hasLeaderRoleViaManagers(
           accessToken,
           groupId,
           userId
         );
-        if (viaManagers) {
-          return true;
-        }
       }
 
-      return await this.hasLeaderRoleViaGetById(accessToken, groupId);
+      return false;
     } catch (e) {
       console.warn("Проверка роли VK:", e);
       return false;
