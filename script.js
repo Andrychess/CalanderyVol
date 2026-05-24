@@ -822,6 +822,9 @@ function showModal(visible) {
   const modal = document.getElementById("eventModal");
   modal.classList.toggle("open", visible);
   modal.setAttribute("aria-hidden", visible ? "false" : "true");
+  if (!document.getElementById("eventViewModal")?.classList.contains("open")) {
+    document.body.style.overflow = visible ? "hidden" : "";
+  }
 }
 
 function readFormData() {
@@ -1049,22 +1052,25 @@ function setupModal() {
 async function bootstrap() {
   try {
     ensureConfig();
+    await VkAuth.init();
+    await Favorites.load();
+    isAdmin = await resolveAdminAccess();
+    updateAdminUi();
+    setupFilters();
+    setupViewSwitch();
+    CalendarView.init();
+    setupModal();
+    await loadEvents();
   } catch (error) {
-    document.getElementById("eventsContainer").innerHTML =
-      `<div class="error-msg">${escapeHtml(error.message)}</div>`;
-    setSubtitle("Нужна настройка");
-    return;
+    console.error(error);
+    const container = document.getElementById("eventsContainer");
+    if (container) {
+      container.innerHTML = `<div class="error-msg">${escapeHtml(
+        error.message || "Не удалось запустить приложение"
+      )}</div>`;
+    }
+    setSubtitle("Ошибка запуска");
   }
-
-  await VkAuth.init();
-  await Favorites.load();
-  isAdmin = await resolveAdminAccess();
-  updateAdminUi();
-  setupFilters();
-  setupViewSwitch();
-  CalendarView.init();
-  setupModal();
-  await loadEvents();
 }
 
 bootstrap();

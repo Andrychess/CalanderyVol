@@ -1,21 +1,25 @@
 /** Синхронизация темы мини-приложения с VK (светлая / тёмная) */
 const VkTheme = {
   appearance: "light",
+  _bridgeBound: false,
 
   init(bridge) {
     this.setAppearance(this.detectSystemAppearance());
 
-    if (window.matchMedia) {
+    if (window.matchMedia && !this._mediaBound) {
+      this._mediaBound = true;
       window
         .matchMedia("(prefers-color-scheme: dark)")
         .addEventListener("change", (e) => {
-          if (!bridge) {
+          if (!this._bridgeBound) {
             this.setAppearance(e.matches ? "dark" : "light");
           }
         });
     }
 
-    if (!bridge) return;
+    if (!bridge || this._bridgeBound) return;
+
+    this._bridgeBound = true;
 
     bridge.subscribe((event) => {
       if (event.detail.type === "VKWebAppUpdateConfig") {

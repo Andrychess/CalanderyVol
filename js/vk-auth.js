@@ -23,16 +23,16 @@ const VkAuth = {
     try {
       await this.bridge.send("VKWebAppInit");
       this.isVkEnvironment = true;
-      VkTheme.init(this.bridge);
     } catch (e) {
       console.warn("VKWebAppInit:", e);
       const qp = new URLSearchParams(window.location.search);
       this.isVkEnvironment =
         qp.has("vk_platform") || qp.has("vk_user_id") || qp.has("vk_app_id");
-      VkTheme.init(this.bridge);
     }
 
-    if (!this.isVkEnvironment) {
+    if (this.isVkEnvironment && this.bridge) {
+      VkTheme.init(this.bridge);
+    } else {
       VkTheme.init(null);
     }
   },

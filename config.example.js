@@ -3,8 +3,8 @@
  * config.js не должен попадать в публичный репозиторий с реальными ключами.
  */
 window.APP_CONFIG = {
-  JSONBOX_API_KEY: "a8fdada9c8a28cbe4180de6f8a14d641",
-  JSONBOX_API_KEY_READONLY: "ro_46c9324a04dac4cb3ad083f18df59c6f",
+  JSONBOX_API_KEY: "ВАШ_ПОЛНЫЙ_КЛЮЧ_JSONBOX",
+  JSONBOX_API_KEY_READONLY: "ro_ВАШ_КЛЮЧ_ТОЛЬКО_ДЛЯ_ЧТЕНИЯ",
   VK_APP_ID: 54607109,
   VK_GROUP_ID: 87712996,
   DEV_ADMIN_PASSWORD: "",
