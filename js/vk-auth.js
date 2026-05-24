@@ -310,7 +310,7 @@ const VkAuth = {
         <button type="button" class="join-sheet__close" aria-label="Закрыть">&times;</button>
         <h2 class="join-sheet__title">Переход в чат</h2>
         <p class="join-sheet__hint">На телефоне откройте чат через кнопку ниже.</p>
-        <button type="button" class="join-btn join-sheet__primary">Открыть чат в VK</button>
+        <button type="button" class="join-sheet__primary">Открыть чат в VK</button>
         <a class="secondary-btn join-sheet__link" href="${this.escapeAttr(
           link
         )}" rel="noopener noreferrer">Открыть по ссылке</a>
@@ -401,23 +401,6 @@ const VkAuth = {
     });
   },
 
-  setupJoinHandlers() {
-    if (this._joinHandlersReady) return;
-    this._joinHandlersReady = true;
-
-    document.getElementById("eventsContainer")?.addEventListener(
-      "click",
-      (e) => {
-        const btn = e.target.closest(".join-btn");
-        if (!btn) return;
-        e.preventDefault();
-        e.stopPropagation();
-        this.openJoin(btn.dataset.joinUrl || "");
-      },
-      true
-    );
-  },
-
   openJoin(rawUrl) {
     const link = this.normalizeLink(rawUrl);
     if (!link) {
@@ -431,8 +414,8 @@ const VkAuth = {
     }
 
     if (this.isMobileVkClient()) {
-      this.tryOpenLinkViaBridge(link, true);
       this.showJoinSheet(link);
+      setTimeout(() => this.tryOpenLinkViaBridge(link, true), 0);
       return;
     }
 

@@ -435,7 +435,8 @@ body {
     cursor: wait;
 }
 
-.join-btn {
+.join-btn,
+.event-join-btn {
     display: block;
     box-sizing: border-box;
     font-family: inherit;
@@ -443,20 +444,25 @@ body {
     text-decoration: none;
     -webkit-user-select: none;
     user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
     background: #48bb78;
     color: white;
     border: none;
-    padding: 14px;
+    padding: 14px 16px;
     border-radius: 12px;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: bold;
+    line-height: 1.35;
     width: 100%;
+    min-height: 48px;
     cursor: pointer;
     transition: background 0.2s;
     touch-action: manipulation;
     -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
     position: relative;
-    z-index: 2;
+    z-index: 5;
+    pointer-events: auto;
 }
 
 .join-btn:active {
@@ -465,7 +471,25 @@ body {
 
 .event-card .card-actions {
     position: relative;
-    z-index: 2;
+    z-index: 5;
+    pointer-events: auto;
+}
+
+.join-modal__open {
+    display: block;
+    box-sizing: border-box;
+    text-align: center;
+    text-decoration: none;
+    background: #48bb78;
+    color: white;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    width: 100%;
+    min-height: 48px;
+    line-height: 1.35;
+    margin-bottom: 10px;
 }
 
 /* Модальное окно */
@@ -561,8 +585,22 @@ body {
 }
 
 .join-sheet__primary {
+    display: block;
+    box-sizing: border-box;
     width: 100%;
     margin-bottom: 10px;
+    padding: 14px 16px;
+    min-height: 48px;
+    border: none;
+    border-radius: 12px;
+    background: #48bb78;
+    color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    touch-action: manipulation;
 }
 
 .join-sheet__link {
