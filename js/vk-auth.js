@@ -226,32 +226,15 @@ const VkAuth = {
     }
   },
 
-  async bridgeSupports(method) {
-    if (!this.bridge) {
-      return false;
-    }
-    try {
-      if (typeof this.bridge.supportsAsync === "function") {
-        return await this.bridge.supportsAsync(method);
-      }
-      if (typeof this.bridge.supports === "function") {
-        return this.bridge.supports(method);
-      }
-    } catch (e) {
-      console.warn(`supports(${method}):`, e);
-    }
-    return true;
-  },
-
   async tryBridge(method, params) {
     if (!this.bridge || !this.isVkEnvironment) {
       return false;
     }
-    if (!(await this.bridgeSupports(method))) {
-      return false;
-    }
     try {
-      await this.bridge.send(method, params);
+      const result = await this.bridge.send(method, params);
+      if (result && result.result === false) {
+        return false;
+      }
       return true;
     } catch (e) {
       console.warn(`${method}:`, e);
@@ -259,15 +242,39 @@ const VkAuth = {
     }
   },
 
-  async openLinkInTopWindow(link) {
+  /** Клик по ссылке внутри iframe (без доступа к window.top) */
+  openLinkViaAnchor(link) {
     try {
-      const target = window.top && window.top !== window ? window.top : window;
-      const opened = target.open(link, "_blank", "noopener,noreferrer");
-      return Boolean(opened);
+      const anchor = document.createElement("a");
+      anchor.href = link;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return true;
     } catch (e) {
-      console.warn("top.open:", e);
+      console.warn("openLinkViaAnchor:", e);
       return false;
     }
+  },
+
+  async openLinkViaBridge(link) {
+    const bridgeMethods = [
+      ["VKWebAppOpenLink", { link }],
+      ["VKWebAppOpenURLInExternalBrowser", { url: link }],
+      ["VKWebAppOpenURLInExternalBrowser", { link }],
+      ["VKWebAppOpenURL", { url: link }],
+      ["VKWebAppOpenURL", { link }],
+    ];
+
+    for (const [method, params] of bridgeMethods) {
+      if (await this.tryBridge(method, params)) {
+        return true;
+      }
+    }
+    return false;
   },
 
   async openLink(url) {
@@ -278,44 +285,27 @@ const VkAuth = {
     }
 
     if (this.bridge && this.isVkEnvironment) {
-      const isVk = this.isVkHost(link);
-
-      // Ссылки VK (чаты vk.me и т.п.) — нативный обработчик клиента.
-      if (isVk && (await this.tryBridge("VKWebAppOpenLink", { link }))) {
+      if (await this.openLinkViaBridge(link)) {
         return true;
       }
 
-      // Внешний браузер / приложение VK, не WebView мини-приложения.
-      if (
-        await this.tryBridge("VKWebAppOpenURLInExternalBrowser", { url: link })
-      ) {
+      if (this.openLinkViaAnchor(link)) {
         return true;
       }
 
-      if (!isVk && (await this.tryBridge("VKWebAppOpenLink", { link }))) {
-        return true;
-      }
-
-      let platform = "";
       try {
-        const version = await this.bridge.send("VKWebAppGetClientVersion");
-        platform = String(version?.platform || "").toLowerCase();
+        const opened = window.open(link, "_blank", "noopener,noreferrer");
+        if (opened) {
+          return true;
+        }
       } catch (e) {
-        console.warn("VKWebAppGetClientVersion:", e);
+        console.warn("window.open:", e);
       }
 
-      if (platform.includes("web") && (await this.openLinkInTopWindow(link))) {
-        return true;
-      }
-
-      try {
-        await navigator.clipboard.writeText(link);
-        alert(
-          "Не удалось открыть ссылку автоматически. Адрес скопирован в буфер обмена — вставьте его в браузер или в поиск VK."
-        );
-      } catch {
-        prompt("Не удалось открыть ссылку. Скопируйте вручную:", link);
-      }
+      prompt(
+        "Не удалось открыть ссылку автоматически. Скопируйте адрес и откройте в VK или браузере:",
+        link
+      );
       return false;
     }
 

@@ -558,3 +558,182 @@ form input, form select, form textarea {
     background: #f56565;
     color: white;
 }
+
+/* Постер 9:16 для экспорта PNG (1080×1920), не влияет на карточки в приложении */
+.png-export-story {
+    width: 1080px;
+    height: 1920px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #2d3748;
+}
+
+.png-export-story--capture {
+    position: fixed;
+    left: -10000px;
+    top: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.png-export-story__header {
+    flex-shrink: 0;
+    min-height: 640px;
+    padding: 72px 56px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background: linear-gradient(165deg, #667eea 0%, #5a67d8 45%, #764ba2 100%);
+    color: #ffffff;
+}
+
+.png-export-story__eyebrow {
+    margin: 0 0 auto 0;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.92;
+}
+
+.png-export-story__title {
+    margin: 0 0 28px;
+    font-size: 58px;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.png-export-story__schedule,
+.png-export-story__schedules {
+    margin: 0;
+    padding: 0;
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.png-export-story__schedules {
+    list-style: none;
+}
+
+.png-export-story__schedules li + li {
+    margin-top: 10px;
+}
+
+.png-export-story__location {
+    margin: 22px 0 0;
+    font-size: 28px;
+    line-height: 1.35;
+    opacity: 0.95;
+}
+
+.png-export-story__main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 40px 56px 32px;
+    overflow: hidden;
+}
+
+.png-export-story__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.png-export-story__badge {
+    padding: 12px 24px;
+    border-radius: 999px;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.png-export-story__badge--level {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.png-export-story__badge--open {
+    background: #bee3f8;
+    color: #2c5282;
+}
+
+.png-export-story__badge--closed {
+    background: #fed7d7;
+    color: #9b2c2c;
+}
+
+.png-export-story__desc {
+    margin: 0;
+    flex-shrink: 0;
+    max-height: 200px;
+    overflow: hidden;
+    padding: 22px 26px;
+    border-radius: 18px;
+    background: #f7fafc;
+    font-size: 26px;
+    line-height: 1.45;
+    color: #4a5568;
+}
+
+.png-export-story__sections {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow: hidden;
+}
+
+.png-export-story__block {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 22px 26px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.png-export-story__block-title {
+    margin: 0 0 14px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #2d3748;
+}
+
+.png-export-story__block-list {
+    margin: 0;
+    padding-left: 24px;
+    font-size: 23px;
+    line-height: 1.4;
+    color: #4a5568;
+}
+
+.png-export-story__block-list li {
+    margin: 8px 0;
+}
+
+.png-export-story__more {
+    color: #718096;
+    font-style: italic;
+    list-style: none;
+    margin-left: -24px;
+}
+
+.png-export-story__footer {
+    flex-shrink: 0;
+    padding: 28px 56px 48px;
+    border-top: 1px solid #e2e8f0;
+    text-align: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: #718096;
+}

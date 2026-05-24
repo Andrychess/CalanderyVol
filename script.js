@@ -257,6 +257,97 @@ function textToList(text) {
     .filter(Boolean);
 }
 
+const PNG_EXPORT_LIST_LIMIT = 7;
+const PNG_EXPORT_DESC_LIMIT = 360;
+
+function truncateForExport(text, maxLen) {
+  const value = String(text || "").trim();
+  if (value.length <= maxLen) return value;
+  return `${value.slice(0, maxLen - 1).trim()}…`;
+}
+
+function renderExportSchedules(event) {
+  const schedules = getEventSchedules(event);
+  if (!schedules.length) {
+    return '<p class="png-export-story__schedule">Дата не указана</p>';
+  }
+
+  if (schedules.length === 1) {
+    return `<p class="png-export-story__schedule">${escapeHtml(formatScheduleLine(schedules[0]))}</p>`;
+  }
+
+  return `
+    <ul class="png-export-story__schedules">
+      ${schedules
+        .map(
+          (item) =>
+            `<li class="png-export-story__schedule">${escapeHtml(formatScheduleLine(item))}</li>`
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderExportListBlock(title, items) {
+  if (!items.length) return "";
+
+  const visible = items.slice(0, PNG_EXPORT_LIST_LIMIT);
+  const rest = items.length - visible.length;
+
+  return `
+    <section class="png-export-story__block">
+      <h2 class="png-export-story__block-title">${escapeHtml(title)}</h2>
+      <ul class="png-export-story__block-list">
+        ${visible.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        ${rest > 0 ? `<li class="png-export-story__more">и ещё ${rest}</li>` : ""}
+      </ul>
+    </section>
+  `;
+}
+
+/** DOM 1080×1920 (9:16) — только для экспорта PNG, не для экрана приложения */
+function buildEventExportStoryElement(event) {
+  const functionalityItems = textToList(event.functionality);
+  const conditionItems = textToList(event.conditions);
+  const enrollmentClass =
+    event.enrollment === "closed"
+      ? "png-export-story__badge--closed"
+      : "png-export-story__badge--open";
+  const sectionsHtml = [
+    renderExportListBlock("Функционал", functionalityItems),
+    renderExportListBlock("Условия", conditionItems),
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const root = document.createElement("div");
+  root.className = "png-export-story";
+  root.setAttribute("aria-hidden", "true");
+  root.innerHTML = `
+    <header class="png-export-story__header">
+      <p class="png-export-story__eyebrow">Мероприятие</p>
+      <h1 class="png-export-story__title">${escapeHtml(event.title)}</h1>
+      <div class="png-export-story__when">${renderExportSchedules(event)}</div>
+      <p class="png-export-story__location">📍 ${escapeHtml(event.location || DEFAULT_LOCATION)}</p>
+    </header>
+    <main class="png-export-story__main">
+      <div class="png-export-story__badges">
+        <span class="png-export-story__badge png-export-story__badge--level">${escapeHtml(formatLevelLabel(event.level))}</span>
+        <span class="png-export-story__badge ${enrollmentClass}">${escapeHtml(formatEnrollmentLabel(event.enrollment))}</span>
+      </div>
+      ${
+        event.description
+          ? `<p class="png-export-story__desc">${escapeHtml(truncateForExport(event.description, PNG_EXPORT_DESC_LIMIT))}</p>`
+          : ""
+      }
+      ${sectionsHtml ? `<div class="png-export-story__sections">${sectionsHtml}</div>` : ""}
+    </main>
+    <footer class="png-export-story__footer">Календарь мероприятий</footer>
+  `;
+
+  return root;
+}
+
 function getEventShareUrl(eventId) {
   const url = new URL(window.location.href);
   url.searchParams.set("event", eventId);
@@ -498,7 +589,7 @@ function renderEvents() {
               ? `<div class="edit-buttons no-export">
                   <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
                   <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
-                  <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 1:1</button>
+                  <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 9:16</button>
                 </div>`
               : ""
           }
@@ -528,7 +619,10 @@ function renderEvents() {
       btn.disabled = true;
       btn.textContent = "Создаём PNG…";
       try {
-        await CardPngExport.exportCard(btn.dataset.id, btn.dataset.title);
+        const event = events.find(
+          (item) => String(item.id) === String(btn.dataset.id)
+        );
+        await CardPngExport.exportCard(event);
       } catch (error) {
         alert(error.message || "Не удалось скачать PNG");
       } finally {

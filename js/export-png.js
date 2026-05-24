@@ -1,5 +1,6 @@
-/** Квадрат для постов/сторис VK (1:1) */
-const PNG_EXPORT_SIZE = 1080;
+/** Вертикальный формат для сторис / клипов VK (9:16) */
+const PNG_EXPORT_WIDTH = 1080;
+const PNG_EXPORT_HEIGHT = 1920;
 
 const CardPngExport = {
   sanitizeFilename(title) {
@@ -11,70 +12,30 @@ const CardPngExport = {
     return safe || "meropriyatie";
   },
 
-  hideForExport(card) {
-    const hidden = [];
-    card.querySelectorAll(".no-export").forEach((el) => {
-      hidden.push({ el, display: el.style.display });
-      el.style.display = "none";
-    });
-    return hidden;
-  },
-
-  restoreAfterExport(hidden) {
-    hidden.forEach(({ el, display }) => {
-      el.style.display = display;
-    });
-  },
-
-  /** Рендер карточки в квадратное PNG 1:1 с полями по краям */
-  toSquareCanvas(sourceCanvas) {
-    const square = document.createElement("canvas");
-    square.width = PNG_EXPORT_SIZE;
-    square.height = PNG_EXPORT_SIZE;
-    const ctx = square.getContext("2d");
-    if (!ctx) {
-      throw new Error("Не удалось подготовить изображение");
-    }
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, PNG_EXPORT_SIZE, PNG_EXPORT_SIZE);
-
-    const scale = Math.min(
-      PNG_EXPORT_SIZE / sourceCanvas.width,
-      PNG_EXPORT_SIZE / sourceCanvas.height
-    );
-    const width = sourceCanvas.width * scale;
-    const height = sourceCanvas.height * scale;
-    const x = (PNG_EXPORT_SIZE - width) / 2;
-    const y = (PNG_EXPORT_SIZE - height) / 2;
-    ctx.drawImage(sourceCanvas, x, y, width, height);
-
-    return square;
-  },
-
-  async exportCard(eventId, title) {
+  async exportCard(event) {
     if (typeof html2canvas === "undefined") {
       throw new Error("Библиотека html2canvas не загружена");
     }
-
-    const card = document.querySelector(
-      `.event-card[data-id="${CSS.escape(String(eventId))}"]`
-    );
-    if (!card) {
-      throw new Error("Карточка не найдена");
+    if (typeof buildEventExportStoryElement !== "function") {
+      throw new Error("Модуль экспорта не загружен");
+    }
+    if (!event) {
+      throw new Error("Мероприятие не найдено");
     }
 
-    const hidden = this.hideForExport(card);
+    const frame = buildEventExportStoryElement(event);
+    frame.classList.add("png-export-story--capture");
+    document.body.appendChild(frame);
 
     try {
-      const sourceCanvas = await html2canvas(card, {
+      const canvas = await html2canvas(frame, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        width: PNG_EXPORT_WIDTH,
+        height: PNG_EXPORT_HEIGHT,
+        scale: 1,
         logging: false,
         useCORS: true,
       });
-
-      const canvas = this.toSquareCanvas(sourceCanvas);
 
       const blob = await new Promise((resolve, reject) => {
         canvas.toBlob(
@@ -87,8 +48,7 @@ const CardPngExport = {
         );
       });
 
-      const filename = `${this.sanitizeFilename(title)}.png`;
-
+      const filename = `${this.sanitizeFilename(event.title)}.png`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -98,7 +58,7 @@ const CardPngExport = {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } finally {
-      this.restoreAfterExport(hidden);
+      frame.remove();
     }
   },
 };
