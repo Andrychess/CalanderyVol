@@ -586,9 +586,9 @@ function renderEvents() {
           }
 
           <div class="card-actions no-export">
-            <a class="join-btn" href="${escapeAttr(VkAuth.normalizeLink(event.buttonUrl))}" rel="noopener noreferrer" onclick="return VkAuth.onJoinClick(event)">
+            <button type="button" class="join-btn" data-join-url="${escapeAttr(VkAuth.normalizeLink(event.buttonUrl))}">
               ${escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL)}
-            </a>
+            </button>
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
           </div>
 
@@ -857,6 +857,7 @@ function setupFilters() {
 
 function setupModal() {
   VkAuth.initJoinModal();
+  VkAuth.setupJoinHandlers();
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
   document.getElementById("addScheduleBtn").addEventListener("click", () => {
     document

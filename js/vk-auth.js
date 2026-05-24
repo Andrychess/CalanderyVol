@@ -204,6 +204,42 @@ const VkAuth = {
     ).toLowerCase();
   },
 
+  isMobileVkClient() {
+    const platform = this.getLaunchPlatform();
+    return (
+      platform === "android" ||
+      platform === "ios" ||
+      platform.startsWith("mobile")
+    );
+  },
+
+  getJoinLinkCandidates(url) {
+    const primary = this.normalizeLink(url);
+    if (!primary) return [];
+
+    const candidates = [primary];
+
+    try {
+      const parsed = new URL(primary);
+      if (parsed.hostname === "vk.me") {
+        candidates.push(
+          primary.replace("https://vk.me/", "https://m.vk.com/")
+        );
+        candidates.push(primary.replace(/^https:\/\//i, "vk://"));
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const groupId = window.APP_CONFIG?.VK_GROUP_ID;
+    if (groupId) {
+      candidates.push(`https://vk.com/im?sel=-${groupId}`);
+      candidates.push(`https://vk.com/write-${groupId}`);
+    }
+
+    return [...new Set(candidates)];
+  },
+
   normalizeLink(url) {
     if (!url) return "";
     let link = String(url).trim();
@@ -228,29 +264,100 @@ const VkAuth = {
     return this.bridge.send(method, params);
   },
 
-  tryOpenLinkViaBridge(link) {
+  tryOpenLinkViaBridge(link, mobileFirst = false) {
     if (!this.bridge || !this.isVkEnvironment) {
       return;
     }
 
-    const mobileLike = /mobile|android|iphone|ipad/.test(this.getLaunchPlatform());
-    const attempts = mobileLike
-      ? [
-          () =>
-            this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
-          () => this.bridgeSend("VKWebAppOpenLink", { link }),
-        ]
-      : [
-          () => this.bridgeSend("VKWebAppOpenLink", { link }),
-          () =>
-            this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
-        ];
+    const candidates = this.getJoinLinkCandidates(link);
+    const tryCandidate = (candidate, method) => {
+      if (method === "external") {
+        return this.bridgeSend("VKWebAppOpenURLInExternalBrowser", {
+          url: candidate,
+        });
+      }
+      return this.bridgeSend("VKWebAppOpenLink", { link: candidate });
+    };
+
+    const methods = mobileFirst
+      ? ["external", "link"]
+      : ["link", "external"];
 
     let chain = Promise.reject();
-    attempts.forEach((attempt) => {
-      chain = chain.catch(() => attempt());
+    candidates.forEach((candidate) => {
+      methods.forEach((method) => {
+        chain = chain.catch(() => tryCandidate(candidate, method));
+      });
     });
     chain.catch(() => {});
+  },
+
+  removeJoinSheet() {
+    document.getElementById("joinSheet")?.remove();
+    if (!document.getElementById("joinLinkModal")?.classList.contains("open")) {
+      document.body.style.overflow = "";
+    }
+  },
+
+  showJoinSheet(link) {
+    this.removeJoinSheet();
+
+    const sheet = document.createElement("div");
+    sheet.id = "joinSheet";
+    sheet.className = "join-sheet";
+    sheet.innerHTML = `
+      <div class="join-sheet__panel" role="dialog" aria-modal="true">
+        <button type="button" class="join-sheet__close" aria-label="Закрыть">&times;</button>
+        <h2 class="join-sheet__title">Переход в чат</h2>
+        <p class="join-sheet__hint">На телефоне откройте чат через кнопку ниже.</p>
+        <button type="button" class="join-btn join-sheet__primary">Открыть чат в VK</button>
+        <a class="secondary-btn join-sheet__link" href="${this.escapeAttr(
+          link
+        )}" rel="noopener noreferrer">Открыть по ссылке</a>
+        <button type="button" class="secondary-btn join-sheet__copy">Скопировать ссылку</button>
+      </div>
+    `;
+
+    const close = () => this.removeJoinSheet();
+    sheet.querySelector(".join-sheet__close").addEventListener("click", close);
+    sheet.addEventListener("click", (e) => {
+      if (e.target === sheet) close();
+    });
+
+    sheet.querySelector(".join-sheet__primary").addEventListener("click", () => {
+      this.tryOpenLinkViaBridge(link, true);
+    });
+
+    sheet.querySelector(".join-sheet__copy").addEventListener("click", () => {
+      this.copyJoinLink(link);
+    });
+
+    document.body.appendChild(sheet);
+    document.body.style.overflow = "hidden";
+  },
+
+  escapeAttr(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+  },
+
+  copyJoinLink(link) {
+    if (this.bridge && this.isVkEnvironment) {
+      this.bridgeSend("VKWebAppCopyText", { text: link })
+        .then(() => alert("Ссылка скопирована"))
+        .catch(() => prompt("Скопируйте ссылку:", link));
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(link)
+        .then(() => alert("Ссылка скопирована"))
+        .catch(() => prompt("Скопируйте ссылку:", link));
+      return;
+    }
+    prompt("Скопируйте ссылку:", link);
   },
 
   showJoinModal(link) {
@@ -264,6 +371,7 @@ const VkAuth = {
     anchor.href = link;
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
   },
 
   hideJoinModal() {
@@ -271,6 +379,7 @@ const VkAuth = {
     if (!modal) return;
     modal.classList.remove("open");
     modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
   },
 
   initJoinModal() {
@@ -288,76 +397,59 @@ const VkAuth = {
     copyBtn?.addEventListener("click", () => {
       const link = document.getElementById("joinModalLink")?.href;
       if (!link || link === "#") return;
-
-      if (this.bridge && this.isVkEnvironment) {
-        this.bridgeSend("VKWebAppCopyText", { text: link })
-          .then(() => alert("Ссылка скопирована"))
-          .catch(() => prompt("Скопируйте ссылку:", link));
-        return;
-      }
-
-      if (navigator.clipboard?.writeText) {
-        navigator.clipboard
-          .writeText(link)
-          .then(() => alert("Ссылка скопирована"))
-          .catch(() => prompt("Скопируйте ссылку:", link));
-        return;
-      }
-
-      prompt("Скопируйте ссылку:", link);
+      this.copyJoinLink(link);
     });
   },
 
-  /**
-   * Кнопка «Перейти» (onclick в разметке).
-   * В VK: Bridge + модальное окно с обычной ссылкой (надёжно на телефоне).
-   * Вне VK: стандартный переход по href.
-   */
-  onJoinClick(event) {
-    const el = event.currentTarget;
-    const link = this.normalizeLink(el.href || el.getAttribute("href"));
+  setupJoinHandlers() {
+    if (this._joinHandlersReady) return;
+    this._joinHandlersReady = true;
 
+    document.getElementById("eventsContainer")?.addEventListener(
+      "click",
+      (e) => {
+        const btn = e.target.closest(".join-btn");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this.openJoin(btn.dataset.joinUrl || "");
+      },
+      true
+    );
+  },
+
+  openJoin(rawUrl) {
+    const link = this.normalizeLink(rawUrl);
     if (!link) {
-      event.preventDefault();
       alert("Ссылка для перехода не указана");
-      return false;
+      return;
     }
 
     if (!this.isVkEnvironment) {
-      return true;
+      window.location.href = link;
+      return;
     }
 
-    event.preventDefault();
-
-    if (this.bridge) {
-      this.tryOpenLinkViaBridge(link);
+    if (this.isMobileVkClient()) {
+      this.tryOpenLinkViaBridge(link, true);
+      this.showJoinSheet(link);
+      return;
     }
 
+    this.tryOpenLinkViaBridge(link, false);
     this.showJoinModal(link);
-    return false;
   },
 
-  /** @deprecated используйте onJoinClick */
-  handleJoinClick(event, url) {
-    if (event?.currentTarget) {
-      return this.onJoinClick(event);
-    }
-    return this.openLink(url);
+  /** @deprecated */
+  onJoinClick(event) {
+    event?.preventDefault?.();
+    const el = event?.currentTarget;
+    this.openJoin(el?.dataset?.joinUrl || el?.href || "");
+    return false;
   },
 
   openLink(url) {
-    const link = this.normalizeLink(url);
-    if (!link) {
-      alert("Ссылка для перехода не указана");
-      return false;
-    }
-    if (!this.isVkEnvironment) {
-      window.location.href = link;
-      return true;
-    }
-    this.tryOpenLinkViaBridge(link);
-    this.showJoinModal(link);
-    return false;
+    this.openJoin(url);
   },
 
   async storageGet(key) {
