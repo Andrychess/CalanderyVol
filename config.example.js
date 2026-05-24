@@ -3,16 +3,9 @@
  * config.js не должен попадать в публичный репозиторий с реальными ключами.
  */
 window.APP_CONFIG = {
-  // Полный ключ — только для сохранения (руководитель). Получите на jsonbox.ru
-  JSONBOX_API_KEY: "ваш_полный_api_key",
-
-  // Ключ только для чтения (ro_...) — для загрузки списка у всех пользователей
-  JSONBOX_API_KEY_READONLY: "ro_ваш_readonly_ключ",
-
-  // VK Mini App (https://dev.vk.com)
-  VK_APP_ID: 0,
-  VK_GROUP_ID: 0,
-
-  // Опционально: пароль для теста вне VK (в браузере на ПК). Оставьте "" чтобы отключить.
+  JSONBOX_API_KEY: "a8fdada9c8a28cbe4180de6f8a14d641",
+  JSONBOX_API_KEY_READONLY: "ro_46c9324a04dac4cb3ad083f18df59c6f",
+  VK_APP_ID: 54607109,
+  VK_GROUP_ID: 87712996,
   DEV_ADMIN_PASSWORD: "",
 };
