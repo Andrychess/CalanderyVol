@@ -195,16 +195,64 @@ const VkAuth = {
     }
   },
 
-  openLink(url) {
-    if (!url) return;
+  normalizeLink(url) {
+    if (!url) return "";
+    let link = String(url).trim();
+    if (!link) return "";
+
+    if (/^vk\.me\//i.test(link) || /^m\.vk\.com\//i.test(link)) {
+      link = `https://${link}`;
+    }
+    if (/^vk\.com\//i.test(link) || /^www\./i.test(link)) {
+      link = `https://${link}`;
+    }
+    if (!/^https?:\/\//i.test(link)) {
+      link = `https://${link}`;
+    }
+    return link.replace(/^http:\/\//i, "https://");
+  },
+
+  async openLink(url) {
+    const link = this.normalizeLink(url);
+    if (!link) {
+      alert("Ссылка для перехода не указана");
+      return false;
+    }
 
     if (this.bridge && this.isVkEnvironment) {
-      this.bridge
-        .send("VKWebAppOpenLink", { link: url })
-        .catch(() => window.open(url, "_blank"));
-    } else {
-      window.open(url, "_blank");
+      try {
+        await this.bridge.send("VKWebAppOpenLink", { link });
+        return true;
+      } catch (e) {
+        console.warn("VKWebAppOpenLink:", e);
+      }
+
+      try {
+        if (typeof this.bridge.send === "function") {
+          await this.bridge.send("VKWebAppOpenURL", { url: link });
+          return true;
+        }
+      } catch (e) {
+        console.warn("VKWebAppOpenURL:", e);
+      }
+
+      try {
+        window.location.assign(link);
+        return true;
+      } catch (e) {
+        console.warn("location.assign:", e);
+      }
     }
+
+    try {
+      const opened = window.open(link, "_blank", "noopener,noreferrer");
+      if (opened) return true;
+    } catch (e) {
+      console.warn("window.open:", e);
+    }
+
+    window.location.href = link;
+    return true;
   },
 
   async storageGet(key) {

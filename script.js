@@ -366,9 +366,9 @@ function renderEvents() {
           }
 
           <div class="card-actions no-export">
-            <button type="button" class="join-btn" data-url="${escapeHtml(event.buttonUrl)}">
+            <a class="join-btn" href="${escapeHtml(VkAuth.normalizeLink(event.buttonUrl))}" target="_blank" rel="noopener noreferrer">
               ${escapeHtml(event.buttonLabel || "Перейти")}
-            </button>
+            </a>
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
             <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Сохранить PNG</button>
           </div>
@@ -387,7 +387,12 @@ function renderEvents() {
     .join("");
 
   container.querySelectorAll(".join-btn").forEach((btn) => {
-    btn.addEventListener("click", () => VkAuth.openLink(btn.dataset.url));
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = btn.getAttribute("href") || btn.dataset.url;
+      await VkAuth.openLink(url);
+    });
   });
 
   container.querySelectorAll("[data-action=share]").forEach((btn) => {

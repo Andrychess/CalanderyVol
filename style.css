@@ -368,6 +368,10 @@ body {
 }
 
 .join-btn {
+    display: block;
+    box-sizing: border-box;
+    text-align: center;
+    text-decoration: none;
     background: #48bb78;
     color: white;
     border: none;
@@ -378,10 +382,19 @@ body {
     width: 100%;
     cursor: pointer;
     transition: background 0.2s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 2;
 }
 
 .join-btn:active {
     background: #38a169;
+}
+
+.event-card .card-actions {
+    position: relative;
+    z-index: 2;
 }
 
 /* Модальное окно */
