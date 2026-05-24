@@ -1,5 +1,13 @@
 const VK_API_VERSION = "5.199";
 
+/** Роли с правом вести мероприятия в сообществе (владелец, админ, редактор, модератор) */
+const COMMUNITY_LEADER_ROLES = new Set([
+  "creator",
+  "administrator",
+  "editor",
+  "moderator",
+]);
+
 const VkAuth = {
   bridge: null,
   isVkEnvironment: false,
@@ -31,6 +39,119 @@ const VkAuth = {
     return window.APP_CONFIG?.VK_GROUP_ID || 0;
   },
 
+  async getGroupsAccessToken(appId) {
+    const { access_token: accessToken } = await this.bridge.send(
+      "VKWebAppGetAuthToken",
+      { app_id: appId, scope: "groups" }
+    );
+    return accessToken;
+  },
+
+  async getCurrentUserId() {
+    try {
+      const user = await this.bridge.send("VKWebAppGetUserInfo");
+      return user?.id ?? user?.user_id ?? null;
+    } catch (e) {
+      console.warn("VKWebAppGetUserInfo:", e);
+      return null;
+    }
+  },
+
+  async vkApi(method, params, accessToken) {
+    const url = new URL(`https://api.vk.com/method/${method}`);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
+    });
+    url.searchParams.set("access_token", accessToken);
+    url.searchParams.set("v", VK_API_VERSION);
+
+    const response = await fetch(url.toString());
+    const data = await response.json();
+
+    if (data.error) {
+      console.warn(`VK API ${method}:`, data.error);
+      return null;
+    }
+
+    return data.response;
+  },
+
+  isLeaderRole(role) {
+    return role && COMMUNITY_LEADER_ROLES.has(String(role).toLowerCase());
+  },
+
+  /** groups.getMembers filter=managers — роли creator, administrator, editor, moderator */
+  async hasLeaderRoleViaManagers(accessToken, groupId, userId) {
+    let offset = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const response = await this.vkApi(
+        "groups.getMembers",
+        {
+          group_id: groupId,
+          filter: "managers",
+          offset,
+          count: pageSize,
+        },
+        accessToken
+      );
+
+      if (!response) {
+        return false;
+      }
+
+      const items = response.items || [];
+      const roles = response.roles || [];
+
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
+        const id =
+          typeof item === "object" && item !== null ? item.id : item;
+        const role =
+          typeof item === "object" && item !== null && item.role
+            ? item.role
+            : roles[i];
+
+        if (Number(id) === Number(userId) && this.isLeaderRole(role)) {
+          return true;
+        }
+      }
+
+      if (items.length < pageSize) {
+        break;
+      }
+      offset += pageSize;
+    }
+
+    return false;
+  },
+
+  /** Запасной вариант: флаги is_admin / is_editor / is_moderator (создатель обычно is_admin) */
+  async hasLeaderRoleViaGetById(accessToken, groupId) {
+    const response = await this.vkApi(
+      "groups.getById",
+      {
+        group_id: groupId,
+        fields: "is_admin,is_editor,is_moderator",
+      },
+      accessToken
+    );
+
+    const group = response?.groups?.[0];
+    if (!group) {
+      return false;
+    }
+
+    return (
+      group.is_admin === 1 ||
+      group.is_editor === 1 ||
+      group.is_moderator === 1
+    );
+  },
+
   async isCommunityManager() {
     const cfg = window.APP_CONFIG || {};
     const appId = cfg.VK_APP_ID;
@@ -41,34 +162,21 @@ const VkAuth = {
     }
 
     try {
-      const { access_token: accessToken } = await this.bridge.send(
-        "VKWebAppGetAuthToken",
-        { app_id: appId, scope: "groups" }
-      );
+      const accessToken = await this.getGroupsAccessToken(appId);
+      const userId = await this.getCurrentUserId();
 
-      const url = new URL("https://api.vk.com/method/groups.getById");
-      url.searchParams.set("group_id", String(groupId));
-      url.searchParams.set(
-        "fields",
-        "is_admin,is_editor,is_moderator"
-      );
-      url.searchParams.set("access_token", accessToken);
-      url.searchParams.set("v", VK_API_VERSION);
-
-      const response = await fetch(url.toString());
-      const data = await response.json();
-
-      if (data.error) {
-        console.warn("VK API:", data.error);
-        return false;
+      if (userId) {
+        const viaManagers = await this.hasLeaderRoleViaManagers(
+          accessToken,
+          groupId,
+          userId
+        );
+        if (viaManagers) {
+          return true;
+        }
       }
 
-      const group = data.response?.groups?.[0];
-      return (
-        group?.is_admin === 1 ||
-        group?.is_editor === 1 ||
-        group?.is_moderator === 1
-      );
+      return await this.hasLeaderRoleViaGetById(accessToken, groupId);
     } catch (e) {
       console.warn("Проверка роли VK:", e);
       return false;
