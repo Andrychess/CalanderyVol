@@ -28,14 +28,18 @@ function ensureConfig() {
   }
 }
 
-function normalizeEvent(raw) {
-  const functionality =
-    raw.functionality ||
-    (Array.isArray(raw.tasks) ? raw.tasks.join("\n") : raw.tasks || "");
+function normalizeTextField(value) {
+  if (value == null || value === "") return "";
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean).join("\n");
+  }
+  return String(value);
+}
 
-  const conditions = Array.isArray(raw.conditions)
-    ? raw.conditions.join("\n")
-    : raw.conditions || "";
+function normalizeEvent(raw) {
+  const functionality = normalizeTextField(raw.functionality ?? raw.tasks);
+
+  const conditions = normalizeTextField(raw.conditions);
 
   const enrollment =
     raw.enrollment === "closed" || raw.enrollmentStatus === "closed"
@@ -122,8 +126,11 @@ function escapeHtml(str) {
 }
 
 function textToList(text) {
-  if (!text) return [];
-  return text
+  if (text == null || text === "") return [];
+  if (Array.isArray(text)) {
+    return text.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return String(text)
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
