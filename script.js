@@ -458,32 +458,11 @@ async function loadEvents() {
 
   try {
     events = (await JsonBoxStorage.getEvents()).map(normalizeEvent);
-
-    if (events.length === 0) {
-      const seeded = await trySeedFromLocalFile();
-      if (seeded.length > 0 && isAdmin) {
-        events = seeded;
-        await JsonBoxStorage.saveEvents(events);
-      }
-    }
-
     renderCurrentView();
   } catch (error) {
     console.error(error);
     container.innerHTML = `<div class="error-msg">Не удалось загрузить данные: ${escapeHtml(error.message)}</div>`;
     setSubtitle("Ошибка загрузки");
-  }
-}
-
-async function trySeedFromLocalFile() {
-  try {
-    const response = await fetch("events.json?v=" + Date.now());
-    if (!response.ok) return [];
-    const data = await response.json();
-    const list = Array.isArray(data) ? data : data.events;
-    return Array.isArray(list) ? list.map(normalizeEvent) : [];
-  } catch {
-    return [];
   }
 }
 
