@@ -18,12 +18,15 @@ const VkAuth = {
     }
 
     this.bridge = vkBridge;
-    this.isVkEnvironment = true;
 
     try {
       await this.bridge.send("VKWebAppInit");
+      this.isVkEnvironment = true;
     } catch (e) {
       console.warn("VKWebAppInit:", e);
+      const qp = new URLSearchParams(window.location.search);
+      this.isVkEnvironment =
+        qp.has("vk_platform") || qp.has("vk_user_id") || qp.has("vk_app_id");
     }
   },
 
@@ -212,72 +215,43 @@ const VkAuth = {
     return link.replace(/^http:\/\//i, "https://");
   },
 
-  isVkHost(url) {
-    try {
-      const host = new URL(url).hostname.toLowerCase();
-      return (
-        host === "vk.com" ||
-        host.endsWith(".vk.com") ||
-        host === "vk.me" ||
-        host.endsWith(".vk.me")
-      );
-    } catch {
-      return false;
+  bridgeSend(method, params) {
+    if (!this.bridge) {
+      return Promise.reject(new Error("VK Bridge недоступен"));
     }
+    return this.bridge.send(method, params);
   },
 
-  async tryBridge(method, params) {
-    if (!this.bridge || !this.isVkEnvironment) {
-      return false;
-    }
-    try {
-      const result = await this.bridge.send(method, params);
-      if (result && result.result === false) {
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.warn(`${method}:`, e);
-      return false;
-    }
-  },
-
-  /** Клик по ссылке внутри iframe (без доступа к window.top) */
-  openLinkViaAnchor(link) {
-    try {
-      const anchor = document.createElement("a");
-      anchor.href = link;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      return true;
-    } catch (e) {
-      console.warn("openLinkViaAnchor:", e);
-      return false;
-    }
-  },
-
-  async openLinkViaBridge(link) {
-    const bridgeMethods = [
-      ["VKWebAppOpenLink", { link }],
-      ["VKWebAppOpenURLInExternalBrowser", { url: link }],
-      ["VKWebAppOpenURLInExternalBrowser", { link }],
-      ["VKWebAppOpenURL", { url: link }],
-      ["VKWebAppOpenURL", { link }],
+  runBridgeFallbacks(link) {
+    const attempts = [
+      () => this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
+      () => this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { link }),
+      () => this.bridgeSend("VKWebAppOpenURL", { url: link }),
+      () => this.bridgeSend("VKWebAppOpenURL", { link }),
     ];
 
-    for (const [method, params] of bridgeMethods) {
-      if (await this.tryBridge(method, params)) {
-        return true;
-      }
-    }
-    return false;
+    let chain = Promise.reject();
+    attempts.forEach((attempt) => {
+      chain = chain.catch(() => attempt());
+    });
+    chain.catch(() => {
+      prompt(
+        "Не удалось открыть ссылку. Скопируйте и вставьте в VK или браузер:",
+        link
+      );
+    });
   },
 
-  async openLink(url) {
+  /**
+   * Обработчик кнопки «Перейти». Важно: первый вызов Bridge — в том же жесте,
+   * что и tap (без await до send), иначе на iOS/Android VK ссылка не откроется.
+   */
+  handleJoinClick(event, url) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     const link = this.normalizeLink(url);
     if (!link) {
       alert("Ссылка для перехода не указана");
@@ -285,39 +259,24 @@ const VkAuth = {
     }
 
     if (this.bridge && this.isVkEnvironment) {
-      if (await this.openLinkViaBridge(link)) {
-        return true;
-      }
-
-      if (this.openLinkViaAnchor(link)) {
-        return true;
-      }
-
-      try {
-        const opened = window.open(link, "_blank", "noopener,noreferrer");
-        if (opened) {
-          return true;
-        }
-      } catch (e) {
-        console.warn("window.open:", e);
-      }
-
-      prompt(
-        "Не удалось открыть ссылку автоматически. Скопируйте адрес и откройте в VK или браузере:",
-        link
+      this.bridgeSend("VKWebAppOpenLink", { link }).catch(() =>
+        this.runBridgeFallbacks(link)
       );
       return false;
     }
 
     try {
-      const opened = window.open(link, "_blank", "noopener,noreferrer");
-      if (opened) return true;
+      window.open(link, "_blank", "noopener,noreferrer");
     } catch (e) {
       console.warn("window.open:", e);
+      window.location.href = link;
     }
+    return false;
+  },
 
-    window.location.href = link;
-    return true;
+  /** @deprecated используйте handleJoinClick */
+  openLink(url) {
+    return this.handleJoinClick(null, url);
   },
 
   async storageGet(key) {
