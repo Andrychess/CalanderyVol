@@ -14,6 +14,11 @@
         <p class="subtitle" id="appSubtitle">Загрузка...</p>
     </div>
 
+    <div class="view-switch" role="tablist" aria-label="Режим просмотра">
+        <button type="button" class="view-switch-btn active" data-view="list" role="tab" aria-selected="true">Список</button>
+        <button type="button" class="view-switch-btn" data-view="calendar" role="tab" aria-selected="false">Календарь</button>
+    </div>
+
     <div class="toolbar">
         <input type="search" id="searchInput" class="search-input" placeholder="Поиск по названию..." autocomplete="off">
 
@@ -37,8 +42,23 @@
         <button type="button" class="add-event-btn" id="addEventBtn">Добавить мероприятие</button>
     </div>
 
-    <div id="eventsContainer" class="events-list">
-        <div class="loading">Загрузка мероприятий...</div>
+    <div id="listView">
+        <div id="eventsContainer" class="events-list">
+            <div class="loading">Загрузка мероприятий...</div>
+        </div>
+    </div>
+
+    <div id="calendarView" class="calendar-view hidden" aria-hidden="true">
+        <div id="calendarContainer">
+            <div class="loading">Загрузка календаря...</div>
+        </div>
+    </div>
+
+    <div id="eventViewModal" class="modal" aria-hidden="true">
+        <div class="modal-content event-view-modal">
+            <button type="button" class="close" id="eventViewClose" aria-label="Закрыть">&times;</button>
+            <div id="eventViewBody"></div>
+        </div>
     </div>
 
     <div id="eventModal" class="modal" aria-hidden="true">
@@ -99,6 +119,7 @@
     <script src="js/jsonbox.js"></script>
     <script src="js/vk-auth.js"></script>
     <script src="js/export-png.js"></script>
+    <script src="js/calendar-view.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

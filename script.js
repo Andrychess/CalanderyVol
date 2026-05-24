@@ -14,6 +14,7 @@ const DEFAULT_BUTTON_LABEL =
 let events = [];
 let isAdmin = false;
 let editingEventId = null;
+let viewMode = "list";
 
 const filterState = {
   search: "",
@@ -424,7 +425,7 @@ async function loadEvents() {
       }
     }
 
-    renderEvents();
+    renderCurrentView();
   } catch (error) {
     console.error(error);
     container.innerHTML = `<div class="error-msg">Не удалось загрузить данные: ${escapeHtml(error.message)}</div>`;
@@ -529,91 +530,74 @@ function renderEmptyState() {
   `;
 }
 
-function renderEvents() {
-  const container = document.getElementById("eventsContainer");
-  const visible = getFilteredEvents();
+function renderEventCard(event, options = {}) {
+  const { viewOnly = false } = options;
+  const functionalityItems = textToList(event.functionality);
+  const conditionItems = textToList(event.conditions);
+  const isFavorite = Favorites.has(event.id);
+  const enrollmentClass =
+    event.enrollment === "closed" ? "enrollment-closed" : "enrollment-open";
 
-  document.getElementById("pastEventsFilterBtn")?.classList.toggle(
-    "active",
-    filterState.showPast
-  );
-  document.getElementById("favoritesFilterBtn")?.classList.toggle(
-    "active",
-    filterState.favoritesOnly
-  );
+  return `
+    <article class="event-card ${isEventPast(event) ? "event-card-past" : ""}" data-id="${escapeHtml(event.id)}">
+      <div class="card-top-row">
+        <div class="event-header">
+          <h2 class="event-title">${escapeHtml(event.title)}</h2>
+          ${renderSchedulesList(event)}
+          <p class="event-location">📍 ${escapeHtml(event.location)}</p>
+        </div>
+        <button type="button" class="favorite-btn no-export ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
+      </div>
 
-  if (!visible.length) {
-    container.innerHTML = renderEmptyState();
-    document.getElementById("emptyAddBtn")?.addEventListener("click", openAddModal);
-    return;
-  }
+      <div class="badge-row">
+        <span class="badge level">${escapeHtml(formatLevelLabel(event.level))}</span>
+        <span class="badge ${enrollmentClass}">${escapeHtml(formatEnrollmentLabel(event.enrollment))}</span>
+      </div>
 
-  container.innerHTML = visible
-    .map((event) => {
-      const functionalityItems = textToList(event.functionality);
-      const conditionItems = textToList(event.conditions);
-      const isFavorite = Favorites.has(event.id);
-      const enrollmentClass =
-        event.enrollment === "closed" ? "enrollment-closed" : "enrollment-open";
+      ${
+        event.description
+          ? `<p class="event-desc">${escapeHtml(event.description)}</p>`
+          : ""
+      }
 
-      return `
-        <article class="event-card ${isEventPast(event) ? "event-card-past" : ""}" data-id="${escapeHtml(event.id)}">
-          <div class="card-top-row">
-            <div class="event-header">
-              <h2 class="event-title">${escapeHtml(event.title)}</h2>
-              ${renderSchedulesList(event)}
-              <p class="event-location">📍 ${escapeHtml(event.location)}</p>
-            </div>
-            <button type="button" class="favorite-btn no-export ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
-          </div>
+      ${
+        functionalityItems.length
+          ? `<div class="event-block">
+              <strong>Функционал</strong>
+              <ul>${functionalityItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>`
+          : ""
+      }
 
-          <div class="badge-row">
-            <span class="badge level">${escapeHtml(formatLevelLabel(event.level))}</span>
-            <span class="badge ${enrollmentClass}">${escapeHtml(formatEnrollmentLabel(event.enrollment))}</span>
-          </div>
+      ${
+        conditionItems.length
+          ? `<div class="event-block">
+              <strong>Условия</strong>
+              <ul>${conditionItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>`
+          : ""
+      }
 
-          ${
-            event.description
-              ? `<p class="event-desc">${escapeHtml(event.description)}</p>`
-              : ""
-          }
+      <div class="card-actions no-export">
+        ${renderJoinButton(event)}
+        <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
+      </div>
 
-          ${
-            functionalityItems.length
-              ? `<div class="event-block">
-                  <strong>Функционал</strong>
-                  <ul>${functionalityItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-                </div>`
-              : ""
-          }
+      ${
+        !viewOnly && isAdmin
+          ? `<div class="edit-buttons no-export">
+              <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
+              <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
+              <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 9:16</button>
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
 
-          ${
-            conditionItems.length
-              ? `<div class="event-block">
-                  <strong>Условия</strong>
-                  <ul>${conditionItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
-                </div>`
-              : ""
-          }
-
-          <div class="card-actions no-export">
-            ${renderJoinButton(event)}
-            <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
-          </div>
-
-          ${
-            isAdmin
-              ? `<div class="edit-buttons no-export">
-                  <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
-                  <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
-                  <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 9:16</button>
-                </div>`
-              : ""
-          }
-        </article>
-      `;
-    })
-    .join("");
+function bindEventCardActions(container) {
+  if (!container) return;
 
   container.querySelectorAll("[data-action=share]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -643,7 +627,7 @@ function renderEvents() {
   container.querySelectorAll("[data-action=favorite]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       await Favorites.toggle(btn.dataset.id);
-      renderEvents();
+      renderCurrentView();
     });
   });
 
@@ -655,7 +639,75 @@ function renderEvents() {
       btn.addEventListener("click", () => deleteEvent(btn.dataset.id));
     });
   }
+}
 
+function showEventViewModal(visible) {
+  const modal = document.getElementById("eventViewModal");
+  modal.classList.toggle("open", visible);
+  modal.setAttribute("aria-hidden", visible ? "false" : "true");
+  document.body.style.overflow = visible ? "hidden" : "";
+}
+
+function openEventViewModal(eventId) {
+  const event = events.find((item) => String(item.id) === String(eventId));
+  if (!event) return;
+
+  const body = document.getElementById("eventViewBody");
+  body.innerHTML = renderEventCard(event, { viewOnly: true });
+  bindEventCardActions(body);
+  showEventViewModal(true);
+}
+
+function setViewMode(mode) {
+  viewMode = mode === "calendar" ? "calendar" : "list";
+
+  document.querySelectorAll(".view-switch-btn").forEach((btn) => {
+    const active = btn.dataset.view === viewMode;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  document.getElementById("listView").classList.toggle("hidden", viewMode !== "list");
+  const calendarView = document.getElementById("calendarView");
+  calendarView.classList.toggle("hidden", viewMode !== "calendar");
+  calendarView.setAttribute(
+    "aria-hidden",
+    viewMode !== "calendar" ? "true" : "false"
+  );
+
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  document.getElementById("pastEventsFilterBtn")?.classList.toggle(
+    "active",
+    filterState.showPast
+  );
+  document.getElementById("favoritesFilterBtn")?.classList.toggle(
+    "active",
+    filterState.favoritesOnly
+  );
+
+  if (viewMode === "calendar") {
+    CalendarView.render();
+    return;
+  }
+
+  renderEvents();
+}
+
+function renderEvents() {
+  const container = document.getElementById("eventsContainer");
+  const visible = getFilteredEvents();
+
+  if (!visible.length) {
+    container.innerHTML = renderEmptyState();
+    document.getElementById("emptyAddBtn")?.addEventListener("click", openAddModal);
+    return;
+  }
+
+  container.innerHTML = visible.map((event) => renderEventCard(event)).join("");
+  bindEventCardActions(container);
   scrollToEventFromUrl();
 }
 
@@ -664,7 +716,14 @@ function scrollToEventFromUrl() {
   const eventId = params.get("event");
   if (!eventId) return;
 
-  const card = document.querySelector(`.event-card[data-id="${CSS.escape(eventId)}"]`);
+  if (viewMode === "calendar") {
+    openEventViewModal(eventId);
+    return;
+  }
+
+  const card = document.querySelector(
+    `.event-card[data-id="${CSS.escape(eventId)}"]`
+  );
   if (card) {
     card.classList.add("event-card-highlight");
     card.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -780,7 +839,7 @@ async function handleFormSubmit(event) {
       );
     }
 
-    renderEvents();
+    renderCurrentView();
   } catch (error) {
     setFormError(error.message || "Ошибка сохранения");
   } finally {
@@ -796,7 +855,7 @@ async function deleteEvent(eventId) {
     events = events.filter((item) => item.id !== eventId);
     await saveEvents();
     await reloadEventsFromStorage();
-    renderEvents();
+    renderCurrentView();
   } catch (error) {
     alert(error.message || "Ошибка удаления");
   }
@@ -839,7 +898,7 @@ function setupFilters() {
   const searchInput = document.getElementById("searchInput");
   searchInput.addEventListener("input", () => {
     filterState.search = searchInput.value;
-    renderEvents();
+    renderCurrentView();
   });
 
   document.querySelectorAll(".filter-chip").forEach((chip) => {
@@ -848,23 +907,40 @@ function setupFilters() {
       document.querySelectorAll(".filter-chip").forEach((el) => {
         el.classList.toggle("active", el === chip);
       });
-      renderEvents();
+      renderCurrentView();
     });
   });
 
   document.getElementById("favoritesFilterBtn").addEventListener("click", () => {
     filterState.favoritesOnly = !filterState.favoritesOnly;
-    renderEvents();
+    renderCurrentView();
   });
 
   document.getElementById("pastEventsFilterBtn").addEventListener("click", () => {
     filterState.showPast = !filterState.showPast;
     updateAdminUi();
-    renderEvents();
+    renderCurrentView();
+  });
+}
+
+function setupViewSwitch() {
+  document.querySelectorAll(".view-switch-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setViewMode(btn.dataset.view);
+    });
   });
 }
 
 function setupModal() {
+  document.getElementById("eventViewClose")?.addEventListener("click", () => {
+    showEventViewModal(false);
+  });
+  document.getElementById("eventViewModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "eventViewModal") {
+      showEventViewModal(false);
+    }
+  });
+
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
   document.getElementById("addScheduleBtn").addEventListener("click", () => {
     document
@@ -895,6 +971,8 @@ async function bootstrap() {
   isAdmin = await resolveAdminAccess();
   updateAdminUi();
   setupFilters();
+  setupViewSwitch();
+  CalendarView.init();
   setupModal();
   await loadEvents();
 }
