@@ -14,6 +14,7 @@ const VkAuth = {
 
   async init() {
     if (typeof vkBridge === "undefined") {
+      VkTheme.init(null);
       return;
     }
 
@@ -22,11 +23,17 @@ const VkAuth = {
     try {
       await this.bridge.send("VKWebAppInit");
       this.isVkEnvironment = true;
+      VkTheme.init(this.bridge);
     } catch (e) {
       console.warn("VKWebAppInit:", e);
       const qp = new URLSearchParams(window.location.search);
       this.isVkEnvironment =
         qp.has("vk_platform") || qp.has("vk_user_id") || qp.has("vk_app_id");
+      VkTheme.init(this.bridge);
+    }
+
+    if (!this.isVkEnvironment) {
+      VkTheme.init(null);
     }
   },
 
