@@ -435,8 +435,7 @@ body {
     cursor: wait;
 }
 
-.join-btn,
-.event-join-btn {
+.join-btn {
     display: block;
     box-sizing: border-box;
     font-family: inherit;
@@ -469,27 +468,15 @@ body {
     background: #38a169;
 }
 
+.join-btn--disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .event-card .card-actions {
     position: relative;
     z-index: 5;
     pointer-events: auto;
-}
-
-.join-modal__open {
-    display: block;
-    box-sizing: border-box;
-    text-align: center;
-    text-decoration: none;
-    background: #48bb78;
-    color: white;
-    padding: 14px 16px;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: bold;
-    width: 100%;
-    min-height: 48px;
-    line-height: 1.35;
-    margin-bottom: 10px;
 }
 
 /* Модальное окно */
@@ -507,114 +494,6 @@ body {
 
 .modal.open {
     display: block;
-}
-
-.join-modal {
-    z-index: 1100;
-}
-
-.join-modal__title {
-    margin: 0 36px 12px 0;
-    font-size: 20px;
-    color: #2d3748;
-}
-
-.join-modal__hint {
-    margin: 0 0 16px;
-    font-size: 14px;
-    line-height: 1.45;
-    color: #718096;
-}
-
-.join-modal__open {
-    margin-bottom: 10px;
-}
-
-.join-modal__copy {
-    width: 100%;
-}
-
-/* Полноэкранная панель перехода в чат (мобильный VK) */
-.join-sheet {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483000;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding: 16px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-    background: rgba(0, 0, 0, 0.55);
-    box-sizing: border-box;
-}
-
-.join-sheet__panel {
-    width: 100%;
-    max-width: 480px;
-    background: #fff;
-    border-radius: 20px 20px 0 0;
-    padding: 20px 20px 24px;
-    position: relative;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.join-sheet__close {
-    position: absolute;
-    top: 12px;
-    right: 16px;
-    border: none;
-    background: none;
-    font-size: 28px;
-    line-height: 1;
-    color: #a0aec0;
-    cursor: pointer;
-    padding: 4px 8px;
-}
-
-.join-sheet__title {
-    margin: 0 32px 10px 0;
-    font-size: 20px;
-    color: #2d3748;
-}
-
-.join-sheet__hint {
-    margin: 0 0 16px;
-    font-size: 14px;
-    line-height: 1.45;
-    color: #718096;
-}
-
-.join-sheet__primary {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    margin-bottom: 10px;
-    padding: 14px 16px;
-    min-height: 48px;
-    border: none;
-    border-radius: 12px;
-    background: #48bb78;
-    color: #fff;
-    font-size: 16px;
-    font-weight: bold;
-    font-family: inherit;
-    -webkit-appearance: none;
-    appearance: none;
-    touch-action: manipulation;
-}
-
-.join-sheet__link {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    margin-bottom: 10px;
-    text-align: center;
-    text-decoration: none;
-    line-height: 1.2;
-}
-
-.join-sheet__copy {
-    width: 100%;
 }
 
 .modal-content {

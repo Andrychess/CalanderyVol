@@ -254,6 +254,17 @@ function escapeAttr(str) {
     .replace(/</g, "&lt;");
 }
 
+function renderJoinButton(event) {
+  const label = escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL);
+  const url = VkAuth.normalizeLink(event.buttonUrl);
+
+  if (!url) {
+    return `<span class="join-btn join-btn--disabled" aria-disabled="true">${label}</span>`;
+  }
+
+  return `<a class="join-btn" href="${escapeAttr(url)}" rel="noopener noreferrer">${label}</a>`;
+}
+
 function textToList(text) {
   if (text == null || text === "") return [];
   if (Array.isArray(text)) {
@@ -586,9 +597,7 @@ function renderEvents() {
           }
 
           <div class="card-actions no-export">
-            <button type="button" class="join-btn event-join-btn" data-join-url="${escapeAttr(VkAuth.normalizeLink(event.buttonUrl))}">
-              ${escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL)}
-            </button>
+            ${renderJoinButton(event)}
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
           </div>
 
@@ -605,15 +614,6 @@ function renderEvents() {
       `;
     })
     .join("");
-
-  container.querySelectorAll(".event-join-btn").forEach((btn) => {
-    const onJoinTap = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      VkAuth.openJoin(btn.getAttribute("data-join-url") || "");
-    };
-    btn.addEventListener("click", onJoinTap);
-  });
 
   container.querySelectorAll("[data-action=share]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -865,7 +865,6 @@ function setupFilters() {
 }
 
 function setupModal() {
-  VkAuth.initJoinModal();
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
   document.getElementById("addScheduleBtn").addEventListener("click", () => {
     document
