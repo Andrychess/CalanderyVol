@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Мероприятия</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@vkontakte/vk-bridge@2/dist/browser.min.js"></script>
+    <script src="config.js"></script>
+</head>
+<body>
+    <div class="app-header">
+        <h1>Мероприятия</h1>
+        <p class="subtitle" id="appSubtitle">Загрузка...</p>
+    </div>
+
+    <div class="toolbar">
+        <input type="search" id="searchInput" class="search-input" placeholder="Поиск по названию..." autocomplete="off">
+
+        <div class="filter-row">
+            <button type="button" class="filter-chip active" data-level="all">Все</button>
+            <button type="button" class="filter-chip" data-level="вузовский">Вузовский</button>
+            <button type="button" class="filter-chip" data-level="городской">Городской</button>
+            <button type="button" class="filter-chip" data-level="региональный">Региональный</button>
+            <button type="button" class="filter-chip" data-level="межрегиональный">Межрегиональный</button>
+            <button type="button" class="filter-chip" data-level="всероссийский">Всероссийский</button>
+            <button type="button" class="filter-chip" data-level="международный">Международный</button>
+        </div>
+
+        <div class="filter-actions">
+            <button type="button" class="toggle-btn" id="favoritesFilterBtn">Избранное</button>
+            <button type="button" class="toggle-btn hidden" id="pastEventsFilterBtn">Прошедшие мероприятия</button>
+        </div>
+    </div>
+
+    <div id="adminToolbar" class="admin-toolbar hidden">
+        <button type="button" class="add-event-btn" id="addEventBtn">Добавить мероприятие</button>
+    </div>
+
+    <div id="eventsContainer" class="events-list">
+        <div class="loading">Загрузка мероприятий...</div>
+    </div>
+
+    <div id="eventModal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <button type="button" class="close" id="modalClose" aria-label="Закрыть">&times;</button>
+            <h2 id="modalTitle">Новое мероприятие</h2>
+            <form id="eventForm">
+                <input type="hidden" id="eventId">
+                <label class="field-label">Название события *</label>
+                <input type="text" id="eventTitle" required maxlength="200">
+
+                <label class="field-label">Дата *</label>
+                <input type="date" id="eventDate" required>
+
+                <label class="field-label">Время начала *</label>
+                <input type="time" id="eventTime" required>
+
+                <label class="field-label">Время окончания</label>
+                <input type="time" id="eventTimeEnd">
+
+                <label class="field-label">Локация</label>
+                <input type="text" id="eventLocation" value="ЮРГПУ(НПИ)" maxlength="200">
+
+                <label class="field-label">Уровень *</label>
+                <select id="eventLevel" required>
+                    <option value="вузовский">Вузовский</option>
+                    <option value="городской">Городской</option>
+                    <option value="региональный" selected>Региональный</option>
+                    <option value="межрегиональный">Межрегиональный</option>
+                    <option value="всероссийский">Всероссийский</option>
+                    <option value="международный">Международный</option>
+                </select>
+
+                <label class="field-label">Набор участников *</label>
+                <select id="eventEnrollment" required>
+                    <option value="open" selected>Набор открыт</option>
+                    <option value="closed">Набор закрыт</option>
+                </select>
+
+                <label class="field-label">Функционал</label>
+                <textarea id="eventFunctionality" rows="3" placeholder="Задачи и роли участников"></textarea>
+
+                <label class="field-label">Условия</label>
+                <textarea id="eventConditions" rows="2" placeholder="Условия участия"></textarea>
+
+                <label class="field-label">Краткое описание</label>
+                <textarea id="eventDescription" rows="3" placeholder="Кратко о мероприятии"></textarea>
+
+                <label class="field-label">Текст кнопки</label>
+                <input type="text" id="eventButtonLabel" value="Перейти" maxlength="50">
+
+                <label class="field-label">Ссылка или чат VK *</label>
+                <input type="url" id="eventButtonUrl" placeholder="https://vk.me/... или https://..." required>
+
+                <p class="form-hint" id="formError" role="alert"></p>
+                <button type="submit" class="submit-btn" id="formSubmitBtn">Сохранить</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/jsonbox.js"></script>
+    <script src="js/vk-auth.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

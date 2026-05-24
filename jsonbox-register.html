@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Регистрация JsonBox</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 520px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 22px; }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      margin: 8px 0;
+      box-sizing: border-box;
+    }
+    button {
+      background: #667eea;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f4f4f5;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .ok { color: #22543d; }
+    .err { color: #c53030; }
+    .hint { font-size: 14px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Регистрация на JsonBox.ru</h1>
+  <p class="hint">Введите вашу почту — сервис пришлёт подтверждение и вернёт два ключа. Скопируйте их в <code>config.js</code>.</p>
+
+  <label for="email">Email</label>
+  <input type="email" id="email" placeholder="example@mail.ru" autocomplete="email">
+
+  <button type="button" id="registerBtn">Зарегистрироваться (POST)</button>
+
+  <p id="status"></p>
+  <pre id="result" hidden></pre>
+
+  <h2>Готовый config.js</h2>
+  <pre id="configSnippet" hidden></pre>
+
+  <script>
+    const API = "https://jsonbox.ru/api.php?action=register";
+
+    document.getElementById("registerBtn").addEventListener("click", async () => {
+      const email = document.getElementById("email").value.trim();
+      const status = document.getElementById("status");
+      const result = document.getElementById("result");
+      const configSnippet = document.getElementById("configSnippet");
+
+      status.className = "";
+      status.textContent = "Отправка запроса...";
+      result.hidden = true;
+      configSnippet.hidden = true;
+
+      if (!email || !email.includes("@")) {
+        status.className = "err";
+        status.textContent = "Введите корректный email.";
+        return;
+      }
+
+      try {
+        const response = await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+
+        const data = await response.json();
+        result.hidden = false;
+        result.textContent = JSON.stringify(data, null, 2);
+
+        if (data.api_key && data.api_key_read_only) {
+          status.className = "ok";
+          status.textContent = data.message || "Готово! Скопируйте ключи в config.js";
+          configSnippet.hidden = false;
+          configSnippet.textContent =
+`window.APP_CONFIG = {
+  JSONBOX_API_KEY: "${data.api_key}",
+  JSONBOX_API_KEY_READONLY: "${data.api_key_read_only}",
+  VK_APP_ID: 0,
+  VK_GROUP_ID: 0,
+  DEV_ADMIN_PASSWORD: "",
+};`;
+        } else {
+          status.className = "err";
+          status.textContent = data.error || data.message || "Ошибка регистрации";
+        }
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Не удалось связаться с jsonbox.ru: " + e.message;
+      }
+    });
+  </script>
+</body>
+</html>
