@@ -631,6 +631,14 @@ body.app-shell {
   margin-top: 14px;
 }
 
+.admin-card-actions {
+  margin-top: 10px;
+}
+
+.admin-card-actions .secondary-btn {
+  width: 100%;
+}
+
 .join-btn {
   display: flex;
   align-items: center;

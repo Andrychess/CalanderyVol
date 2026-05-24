@@ -601,8 +601,15 @@ function renderEventCard(event, options = {}) {
 
       <div class="card-actions no-export">
         ${renderJoinButton(event)}
-        <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
       </div>
+
+      ${
+        isAdmin
+          ? `<div class="admin-card-actions no-export">
+              <button type="button" class="secondary-btn" data-action="copy-info" data-id="${escapeHtml(event.id)}">Скопировать информацию</button>
+            </div>`
+          : ""
+      }
 
       ${
         !viewOnly && isAdmin
@@ -620,16 +627,24 @@ function renderEventCard(event, options = {}) {
 function bindEventCardActions(container) {
   if (!container) return;
 
-  container.querySelectorAll("[data-action=share]").forEach((btn) => {
-    btn.addEventListener("click", () => {
+  container.querySelectorAll("[data-action=copy-info]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
       const event = events.find(
         (item) => String(item.id) === String(btn.dataset.id)
       );
       if (!event) return;
-      VkAuth.shareEvent({
-        text: buildEventShareText(event),
-        link: getAppVkUrl(),
-      });
+
+      const text = buildEventShareText(event);
+      const copied = await VkAuth.copyText(text);
+      if (copied) {
+        const prev = btn.textContent;
+        btn.textContent = "Скопировано!";
+        setTimeout(() => {
+          btn.textContent = prev;
+        }, 1600);
+      } else {
+        prompt("Скопируйте текст:", text);
+      }
     });
   });
 
