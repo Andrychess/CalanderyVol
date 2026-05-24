@@ -212,6 +212,64 @@ const VkAuth = {
     return link.replace(/^http:\/\//i, "https://");
   },
 
+  isVkHost(url) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      return (
+        host === "vk.com" ||
+        host.endsWith(".vk.com") ||
+        host === "vk.me" ||
+        host.endsWith(".vk.me")
+      );
+    } catch {
+      return false;
+    }
+  },
+
+  async bridgeSupports(method) {
+    if (!this.bridge) {
+      return false;
+    }
+    try {
+      if (typeof this.bridge.supportsAsync === "function") {
+        return await this.bridge.supportsAsync(method);
+      }
+      if (typeof this.bridge.supports === "function") {
+        return this.bridge.supports(method);
+      }
+    } catch (e) {
+      console.warn(`supports(${method}):`, e);
+    }
+    return true;
+  },
+
+  async tryBridge(method, params) {
+    if (!this.bridge || !this.isVkEnvironment) {
+      return false;
+    }
+    if (!(await this.bridgeSupports(method))) {
+      return false;
+    }
+    try {
+      await this.bridge.send(method, params);
+      return true;
+    } catch (e) {
+      console.warn(`${method}:`, e);
+      return false;
+    }
+  },
+
+  async openLinkInTopWindow(link) {
+    try {
+      const target = window.top && window.top !== window ? window.top : window;
+      const opened = target.open(link, "_blank", "noopener,noreferrer");
+      return Boolean(opened);
+    } catch (e) {
+      console.warn("top.open:", e);
+      return false;
+    }
+  },
+
   async openLink(url) {
     const link = this.normalizeLink(url);
     if (!link) {
@@ -220,28 +278,45 @@ const VkAuth = {
     }
 
     if (this.bridge && this.isVkEnvironment) {
-      try {
-        await this.bridge.send("VKWebAppOpenLink", { link });
+      const isVk = this.isVkHost(link);
+
+      // Ссылки VK (чаты vk.me и т.п.) — нативный обработчик клиента.
+      if (isVk && (await this.tryBridge("VKWebAppOpenLink", { link }))) {
         return true;
+      }
+
+      // Внешний браузер / приложение VK, не WebView мини-приложения.
+      if (
+        await this.tryBridge("VKWebAppOpenURLInExternalBrowser", { url: link })
+      ) {
+        return true;
+      }
+
+      if (!isVk && (await this.tryBridge("VKWebAppOpenLink", { link }))) {
+        return true;
+      }
+
+      let platform = "";
+      try {
+        const version = await this.bridge.send("VKWebAppGetClientVersion");
+        platform = String(version?.platform || "").toLowerCase();
       } catch (e) {
-        console.warn("VKWebAppOpenLink:", e);
+        console.warn("VKWebAppGetClientVersion:", e);
+      }
+
+      if (platform.includes("web") && (await this.openLinkInTopWindow(link))) {
+        return true;
       }
 
       try {
-        if (typeof this.bridge.send === "function") {
-          await this.bridge.send("VKWebAppOpenURL", { url: link });
-          return true;
-        }
-      } catch (e) {
-        console.warn("VKWebAppOpenURL:", e);
+        await navigator.clipboard.writeText(link);
+        alert(
+          "Не удалось открыть ссылку автоматически. Адрес скопирован в буфер обмена — вставьте его в браузер или в поиск VK."
+        );
+      } catch {
+        prompt("Не удалось открыть ссылку. Скопируйте вручную:", link);
       }
-
-      try {
-        window.location.assign(link);
-        return true;
-      } catch (e) {
-        console.warn("location.assign:", e);
-      }
+      return false;
     }
 
     try {

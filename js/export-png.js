@@ -1,3 +1,6 @@
+/** Квадрат для постов/сторис VK (1:1) */
+const PNG_EXPORT_SIZE = 1080;
+
 const CardPngExport = {
   sanitizeFilename(title) {
     const safe = String(title || "meropriyatie")
@@ -23,6 +26,32 @@ const CardPngExport = {
     });
   },
 
+  /** Рендер карточки в квадратное PNG 1:1 с полями по краям */
+  toSquareCanvas(sourceCanvas) {
+    const square = document.createElement("canvas");
+    square.width = PNG_EXPORT_SIZE;
+    square.height = PNG_EXPORT_SIZE;
+    const ctx = square.getContext("2d");
+    if (!ctx) {
+      throw new Error("Не удалось подготовить изображение");
+    }
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, PNG_EXPORT_SIZE, PNG_EXPORT_SIZE);
+
+    const scale = Math.min(
+      PNG_EXPORT_SIZE / sourceCanvas.width,
+      PNG_EXPORT_SIZE / sourceCanvas.height
+    );
+    const width = sourceCanvas.width * scale;
+    const height = sourceCanvas.height * scale;
+    const x = (PNG_EXPORT_SIZE - width) / 2;
+    const y = (PNG_EXPORT_SIZE - height) / 2;
+    ctx.drawImage(sourceCanvas, x, y, width, height);
+
+    return square;
+  },
+
   async exportCard(eventId, title) {
     if (typeof html2canvas === "undefined") {
       throw new Error("Библиотека html2canvas не загружена");
@@ -38,12 +67,14 @@ const CardPngExport = {
     const hidden = this.hideForExport(card);
 
     try {
-      const canvas = await html2canvas(card, {
+      const sourceCanvas = await html2canvas(card, {
         backgroundColor: "#ffffff",
         scale: 2,
         logging: false,
         useCORS: true,
       });
+
+      const canvas = this.toSquareCanvas(sourceCanvas);
 
       const blob = await new Promise((resolve, reject) => {
         canvas.toBlob(
@@ -57,16 +88,6 @@ const CardPngExport = {
       });
 
       const filename = `${this.sanitizeFilename(title)}.png`;
-      const file = new File([blob], filename, { type: "image/png" });
-
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: filename });
-          return;
-        } catch (shareError) {
-          if (shareError?.name === "AbortError") return;
-        }
-      }
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

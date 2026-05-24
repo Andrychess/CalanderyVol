@@ -487,11 +487,10 @@ function renderEvents() {
           }
 
           <div class="card-actions no-export">
-            <a class="join-btn" href="${escapeHtml(VkAuth.normalizeLink(event.buttonUrl))}" target="_blank" rel="noopener noreferrer">
+            <button type="button" class="join-btn" data-url="${escapeHtml(VkAuth.normalizeLink(event.buttonUrl))}">
               ${escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL)}
-            </a>
+            </button>
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
-            <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Сохранить PNG</button>
           </div>
 
           ${
@@ -499,6 +498,7 @@ function renderEvents() {
               ? `<div class="edit-buttons no-export">
                   <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
                   <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
+                  <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 1:1</button>
                 </div>`
               : ""
           }
@@ -509,14 +509,10 @@ function renderEvents() {
 
   container.querySelectorAll(".join-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const url = btn.getAttribute("href") || btn.dataset.url;
+      e.preventDefault();
+      const url = btn.dataset.url;
       if (!url) return;
-
-      // В VK открываем через Bridge; вне VK оставляем нативный переход по ссылке.
-      if (VkAuth.isVkEnvironment) {
-        e.preventDefault();
-        VkAuth.openLink(url);
-      }
+      void VkAuth.openLink(url);
     });
   });
 
@@ -534,7 +530,7 @@ function renderEvents() {
       try {
         await CardPngExport.exportCard(btn.dataset.id, btn.dataset.title);
       } catch (error) {
-        alert(error.message || "Не удалось сохранить PNG");
+        alert(error.message || "Не удалось скачать PNG");
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
