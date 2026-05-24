@@ -217,6 +217,23 @@ async function saveEvents() {
   await JsonBoxStorage.saveEvents(events);
 }
 
+async function reloadEventsFromStorage() {
+  const loaded = (await JsonBoxStorage.getEvents()).map(normalizeEvent);
+  const byId = new Map();
+  loaded.forEach((item) => byId.set(item.id, item));
+  events = [...byId.values()];
+}
+
+function generateEventId() {
+  return `ev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getTodayDateString() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 function renderEmptyState() {
   const hasAnyEvents = events.length > 0;
   const inPastMode = isAdmin && filterState.showPast;
@@ -418,6 +435,7 @@ function openAddModal() {
   document.getElementById("eventLevel").value = "региональный";
   document.getElementById("eventLocation").value = DEFAULT_LOCATION;
   document.getElementById("eventEnrollment").value = "open";
+  document.getElementById("eventDate").value = getTodayDateString();
   setFormError("");
   showModal(true);
 }
@@ -453,7 +471,7 @@ function showModal(visible) {
 
 function readFormData() {
   return normalizeEvent({
-    id: document.getElementById("eventId").value || `ev-${Date.now()}`,
+    id: document.getElementById("eventId").value || generateEventId(),
     title: document.getElementById("eventTitle").value.trim(),
     date: document.getElementById("eventDate").value,
     time: document.getElementById("eventTime").value,
