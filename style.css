@@ -485,6 +485,31 @@ body {
     display: block;
 }
 
+.join-modal {
+    z-index: 1100;
+}
+
+.join-modal__title {
+    margin: 0 36px 12px 0;
+    font-size: 20px;
+    color: #2d3748;
+}
+
+.join-modal__hint {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #718096;
+}
+
+.join-modal__open {
+    margin-bottom: 10px;
+}
+
+.join-modal__copy {
+    width: 100%;
+}
+
 .modal-content {
     background: white;
     margin: 20px auto;

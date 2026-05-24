@@ -198,6 +198,12 @@ const VkAuth = {
     }
   },
 
+  getLaunchPlatform() {
+    return (
+      new URLSearchParams(window.location.search).get("vk_platform") || ""
+    ).toLowerCase();
+  },
+
   normalizeLink(url) {
     if (!url) return "";
     let link = String(url).trim();
@@ -222,61 +228,136 @@ const VkAuth = {
     return this.bridge.send(method, params);
   },
 
-  runBridgeFallbacks(link) {
-    const attempts = [
-      () => this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
-      () => this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { link }),
-      () => this.bridgeSend("VKWebAppOpenURL", { url: link }),
-      () => this.bridgeSend("VKWebAppOpenURL", { link }),
-    ];
+  tryOpenLinkViaBridge(link) {
+    if (!this.bridge || !this.isVkEnvironment) {
+      return;
+    }
+
+    const mobileLike = /mobile|android|iphone|ipad/.test(this.getLaunchPlatform());
+    const attempts = mobileLike
+      ? [
+          () =>
+            this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
+          () => this.bridgeSend("VKWebAppOpenLink", { link }),
+        ]
+      : [
+          () => this.bridgeSend("VKWebAppOpenLink", { link }),
+          () =>
+            this.bridgeSend("VKWebAppOpenURLInExternalBrowser", { url: link }),
+        ];
 
     let chain = Promise.reject();
     attempts.forEach((attempt) => {
       chain = chain.catch(() => attempt());
     });
-    chain.catch(() => {
-      prompt(
-        "Не удалось открыть ссылку. Скопируйте и вставьте в VK или браузер:",
-        link
-      );
+    chain.catch(() => {});
+  },
+
+  showJoinModal(link) {
+    const modal = document.getElementById("joinLinkModal");
+    const anchor = document.getElementById("joinModalLink");
+    if (!modal || !anchor) {
+      prompt("Откройте ссылку в VK:", link);
+      return;
+    }
+
+    anchor.href = link;
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+  },
+
+  hideJoinModal() {
+    const modal = document.getElementById("joinLinkModal");
+    if (!modal) return;
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+  },
+
+  initJoinModal() {
+    const modal = document.getElementById("joinLinkModal");
+    const closeBtn = document.getElementById("joinModalClose");
+    const copyBtn = document.getElementById("joinModalCopy");
+
+    closeBtn?.addEventListener("click", () => this.hideJoinModal());
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this.hideJoinModal();
+      }
+    });
+
+    copyBtn?.addEventListener("click", () => {
+      const link = document.getElementById("joinModalLink")?.href;
+      if (!link || link === "#") return;
+
+      if (this.bridge && this.isVkEnvironment) {
+        this.bridgeSend("VKWebAppCopyText", { text: link })
+          .then(() => alert("Ссылка скопирована"))
+          .catch(() => prompt("Скопируйте ссылку:", link));
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(link)
+          .then(() => alert("Ссылка скопирована"))
+          .catch(() => prompt("Скопируйте ссылку:", link));
+        return;
+      }
+
+      prompt("Скопируйте ссылку:", link);
     });
   },
 
   /**
-   * Обработчик кнопки «Перейти». Важно: первый вызов Bridge — в том же жесте,
-   * что и tap (без await до send), иначе на iOS/Android VK ссылка не откроется.
+   * Кнопка «Перейти» (onclick в разметке).
+   * В VK: Bridge + модальное окно с обычной ссылкой (надёжно на телефоне).
+   * Вне VK: стандартный переход по href.
    */
-  handleJoinClick(event, url) {
-    if (event) {
+  onJoinClick(event) {
+    const el = event.currentTarget;
+    const link = this.normalizeLink(el.href || el.getAttribute("href"));
+
+    if (!link) {
       event.preventDefault();
-      event.stopPropagation();
+      alert("Ссылка для перехода не указана");
+      return false;
     }
 
+    if (!this.isVkEnvironment) {
+      return true;
+    }
+
+    event.preventDefault();
+
+    if (this.bridge) {
+      this.tryOpenLinkViaBridge(link);
+    }
+
+    this.showJoinModal(link);
+    return false;
+  },
+
+  /** @deprecated используйте onJoinClick */
+  handleJoinClick(event, url) {
+    if (event?.currentTarget) {
+      return this.onJoinClick(event);
+    }
+    return this.openLink(url);
+  },
+
+  openLink(url) {
     const link = this.normalizeLink(url);
     if (!link) {
       alert("Ссылка для перехода не указана");
       return false;
     }
-
-    if (this.bridge && this.isVkEnvironment) {
-      this.bridgeSend("VKWebAppOpenLink", { link }).catch(() =>
-        this.runBridgeFallbacks(link)
-      );
-      return false;
-    }
-
-    try {
-      window.open(link, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      console.warn("window.open:", e);
+    if (!this.isVkEnvironment) {
       window.location.href = link;
+      return true;
     }
+    this.tryOpenLinkViaBridge(link);
+    this.showJoinModal(link);
     return false;
-  },
-
-  /** @deprecated используйте handleJoinClick */
-  openLink(url) {
-    return this.handleJoinClick(null, url);
   },
 
   async storageGet(key) {
