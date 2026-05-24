@@ -88,7 +88,6 @@ const CalendarView = {
     }
 
     if (this.selectedDate && !map.has(this.selectedDate)) {
-      /* выбранный день без событий — оставляем для просмотра пустого списка */
       return this.selectedDate;
     }
     if (map.has(today)) return today;
@@ -133,6 +132,41 @@ const CalendarView = {
     return cells;
   },
 
+  renderCellMarkers(dayEntries) {
+    if (!dayEntries.length) return "";
+
+    const levels = LevelColors.uniqueLevelsFromEntries(dayEntries);
+    const visible = levels.slice(0, 3);
+    const extra = levels.length - visible.length;
+
+    return `
+      <span class="calendar-cell__markers" aria-hidden="true">
+        ${visible
+          .map(
+            (level) =>
+              `<span class="calendar-marker ${LevelColors.className(level)}"></span>`
+          )
+          .join("")}
+        ${
+          extra > 0
+            ? `<span class="calendar-marker calendar-marker--more">+${extra}</span>`
+            : ""
+        }
+      </span>
+    `;
+  },
+
+  renderLegend() {
+    return EVENT_LEVEL_ORDER.map((level) => {
+      return `
+        <span class="calendar-legend__item">
+          <span class="calendar-legend__dot ${LevelColors.className(level)}"></span>
+          <span class="calendar-legend__label">${escapeHtml(formatLevelLabel(level))}</span>
+        </span>
+      `;
+    }).join("");
+  },
+
   renderDayEvents(entries, dateKey) {
     const listEl = document.getElementById("calendarDayEvents");
     if (!listEl) return;
@@ -156,10 +190,13 @@ const CalendarView = {
                 : schedule.time
               : "";
             return `
-              <button type="button" class="calendar-event-chip ${past ? "calendar-event-chip--past" : ""}" data-event-id="${escapeAttr(event.id)}">
-                <span class="calendar-event-chip__time">${escapeHtml(time || "весь день")}</span>
-                <span class="calendar-event-chip__title">${escapeHtml(event.title)}</span>
-                <span class="calendar-event-chip__level">${escapeHtml(formatLevelLabel(event.level))}</span>
+              <button type="button" class="calendar-event-chip ${LevelColors.className(event.level)} ${past ? "calendar-event-chip--past" : ""}" data-event-id="${escapeAttr(event.id)}">
+                <span class="calendar-event-chip__dot ${LevelColors.className(event.level)}"></span>
+                <span class="calendar-event-chip__body">
+                  <span class="calendar-event-chip__time">${escapeHtml(time || "весь день")}</span>
+                  <span class="calendar-event-chip__title">${escapeHtml(event.title)}</span>
+                  <span class="calendar-event-chip__level">${escapeHtml(formatLevelLabel(event.level))}</span>
+                </span>
               </button>
             `;
           })
@@ -198,48 +235,65 @@ const CalendarView = {
     const today = getTodayDateString();
 
     root.innerHTML = `
-      <div class="calendar-panel">
-        <div class="calendar-nav">
-          <button type="button" class="calendar-nav__btn" id="calendarPrev" aria-label="Предыдущий месяц">‹</button>
-          <div class="calendar-nav__title">
-            <span>${MONTH_NAMES[this.month]} ${this.year}</span>
-            <button type="button" class="calendar-nav__today" id="calendarToday">Сегодня</button>
+      <article class="calendar-glass" aria-label="Календарь мероприятий">
+        <header class="calendar-glass__year">${this.year}</header>
+
+        <div class="calendar-glass__month">
+          <button type="button" class="calendar-glass__arrow" id="calendarPrev" aria-label="Предыдущий месяц">‹</button>
+          <div class="calendar-glass__month-label">
+            <span class="calendar-glass__month-name">${MONTH_NAMES[this.month]}</span>
+            <button type="button" class="calendar-glass__today" id="calendarToday">Сегодня</button>
           </div>
-          <button type="button" class="calendar-nav__btn" id="calendarNext" aria-label="Следующий месяц">›</button>
+          <button type="button" class="calendar-glass__arrow" id="calendarNext" aria-label="Следующий месяц">›</button>
         </div>
-        <div class="calendar-weekdays">
-          ${WEEKDAY_NAMES.map((name) => `<span>${name}</span>`).join("")}
-        </div>
-        <div class="calendar-grid">
-          ${cells
-            .map((cell) => {
-              if (!cell.dateKey) {
-                return `<div class="calendar-cell calendar-cell--muted"><span class="calendar-cell__day">${cell.day}</span></div>`;
-              }
 
-              const dayEntries = entriesMap.get(cell.dateKey) || [];
-              const isToday = cell.dateKey === today;
-              const isSelected = cell.dateKey === this.selectedDate;
-              const past =
-                dayEntries.length > 0 &&
-                dayEntries.every(({ schedule }) => isSchedulePast(schedule));
+        <div class="calendar-glass__body">
+          <div class="calendar-weekdays">
+            ${WEEKDAY_NAMES.map((name) => `<span>${name}</span>`).join("")}
+          </div>
+          <div class="calendar-grid">
+            ${cells
+              .map((cell) => {
+                if (!cell.dateKey) {
+                  return `<div class="calendar-cell calendar-cell--muted"><span class="calendar-cell__day">${cell.day}</span></div>`;
+                }
 
-              return `
-                <button type="button" class="calendar-cell ${isToday ? "calendar-cell--today" : ""} ${isSelected ? "calendar-cell--selected" : ""} ${past ? "calendar-cell--past" : ""} ${dayEntries.length ? "calendar-cell--has-events" : ""}"
-                  data-date="${escapeAttr(cell.dateKey)}">
-                  <span class="calendar-cell__day">${cell.day}</span>
-                  ${
-                    dayEntries.length
-                      ? `<span class="calendar-cell__count">${dayEntries.length}</span>`
-                      : ""
-                  }
-                </button>
-              `;
-            })
-            .join("")}
+                const dayEntries = entriesMap.get(cell.dateKey) || [];
+                const isToday = cell.dateKey === today;
+                const isSelected = cell.dateKey === this.selectedDate;
+                const past =
+                  dayEntries.length > 0 &&
+                  dayEntries.every(({ schedule }) =>
+                    isSchedulePast(schedule)
+                  );
+                const primaryLevel =
+                  dayEntries.length === 1
+                    ? dayEntries[0].event.level
+                    : null;
+
+                return `
+                  <button type="button"
+                    class="calendar-cell ${isToday ? "calendar-cell--today" : ""} ${isSelected ? "calendar-cell--selected" : ""} ${past ? "calendar-cell--past" : ""} ${dayEntries.length ? "calendar-cell--has-events" : ""} ${primaryLevel ? LevelColors.className(primaryLevel) : ""}"
+                    data-date="${escapeAttr(cell.dateKey)}">
+                    <span class="calendar-cell__day">${cell.day}</span>
+                    ${this.renderCellMarkers(dayEntries)}
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
         </div>
-        <div id="calendarDayEvents" class="calendar-day-events"></div>
-      </div>
+
+        <footer class="calendar-glass__legend">
+          <span class="calendar-legend__item calendar-legend__item--today">
+            <span class="calendar-legend__ring"></span>
+            <span class="calendar-legend__label">Сегодня</span>
+          </span>
+          ${this.renderLegend()}
+        </footer>
+
+        <div id="calendarDayEvents" class="calendar-glass__day-list"></div>
+      </article>
     `;
 
     root.querySelectorAll(".calendar-cell[data-date]").forEach((cell) => {
@@ -249,6 +303,9 @@ const CalendarView = {
       });
     });
 
-    this.renderDayEvents(entriesMap.get(this.selectedDate) || [], this.selectedDate);
+    this.renderDayEvents(
+      entriesMap.get(this.selectedDate) || [],
+      this.selectedDate
+    );
   },
 };

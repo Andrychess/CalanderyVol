@@ -1,11 +1,4 @@
-const EVENT_LEVELS = [
-  "вузовский",
-  "городской",
-  "региональный",
-  "межрегиональный",
-  "всероссийский",
-  "международный",
-];
+const EVENT_LEVELS = LevelColors.order;
 
 const DEFAULT_LOCATION = "ЮРГПУ(НПИ)";
 const DEFAULT_BUTTON_LABEL =
@@ -541,7 +534,7 @@ function renderEventCard(event, options = {}) {
   return `
     <article class="event-card ${isEventPast(event) ? "event-card-past" : ""}" data-id="${escapeHtml(event.id)}">
       <div class="card-top-row">
-        <div class="event-header">
+        <div class="event-header ${LevelColors.className(event.level)}">
           <h2 class="event-title">${escapeHtml(event.title)}</h2>
           ${renderSchedulesList(event)}
           <p class="event-location">📍 ${escapeHtml(event.location)}</p>
@@ -550,7 +543,7 @@ function renderEventCard(event, options = {}) {
       </div>
 
       <div class="badge-row">
-        <span class="badge level">${escapeHtml(formatLevelLabel(event.level))}</span>
+        <span class="badge level ${LevelColors.className(event.level)}">${escapeHtml(formatLevelLabel(event.level))}</span>
         <span class="badge ${enrollmentClass}">${escapeHtml(formatEnrollmentLabel(event.enrollment))}</span>
       </div>
 
@@ -679,6 +672,10 @@ function setViewMode(mode) {
 }
 
 function renderCurrentView() {
+  if (isAdmin) {
+    updateAdminUi();
+  }
+
   document.getElementById("pastEventsFilterBtn")?.classList.toggle(
     "active",
     filterState.showPast
@@ -831,7 +828,6 @@ async function handleFormSubmit(event) {
       );
       if (openPast) {
         filterState.showPast = true;
-        updateAdminUi();
       }
     } else if (!isVisible) {
       alert(
@@ -861,6 +857,30 @@ async function deleteEvent(eventId) {
   }
 }
 
+async function deleteAllPastEvents() {
+  const pastEvents = events.filter(isEventPast);
+  if (!pastEvents.length) {
+    alert("Нет прошедших мероприятий для удаления.");
+    return;
+  }
+
+  const count = pastEvents.length;
+  const confirmed = confirm(
+    `Удалить все прошедшие мероприятия (${count})?\n\nДействие нельзя отменить.`
+  );
+  if (!confirmed) return;
+
+  try {
+    events = events.filter((event) => !isEventPast(event));
+    await saveEvents();
+    await reloadEventsFromStorage();
+    renderCurrentView();
+    alert(`Удалено мероприятий: ${count}.`);
+  } catch (error) {
+    alert(error.message || "Ошибка удаления");
+  }
+}
+
 async function resolveAdminAccess() {
   const cfg = window.APP_CONFIG || {};
 
@@ -882,6 +902,18 @@ function updateAdminUi() {
   document
     .getElementById("pastEventsFilterBtn")
     .classList.toggle("hidden", !isAdmin);
+
+  const deletePastBtn = document.getElementById("deleteAllPastBtn");
+  if (deletePastBtn) {
+    const pastCount = events.filter(isEventPast).length;
+    const showDeletePast = isAdmin && filterState.showPast;
+    deletePastBtn.classList.toggle("hidden", !showDeletePast);
+    deletePastBtn.disabled = pastCount === 0;
+    deletePastBtn.textContent =
+      pastCount > 0
+        ? `Удалить все прошедшие мероприятия (${pastCount})`
+        : "Удалить все прошедшие мероприятия";
+  }
 
   if (isAdmin) {
     setSubtitle(
@@ -918,7 +950,6 @@ function setupFilters() {
 
   document.getElementById("pastEventsFilterBtn").addEventListener("click", () => {
     filterState.showPast = !filterState.showPast;
-    updateAdminUi();
     renderCurrentView();
   });
 }
@@ -942,6 +973,9 @@ function setupModal() {
   });
 
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
+  document
+    .getElementById("deleteAllPastBtn")
+    ?.addEventListener("click", deleteAllPastEvents);
   document.getElementById("addScheduleBtn").addEventListener("click", () => {
     document
       .getElementById("schedulesList")
