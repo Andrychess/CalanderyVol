@@ -281,6 +281,74 @@ body {
     margin-top: 6px;
 }
 
+.event-schedules {
+    margin-top: 6px;
+    padding-left: 18px;
+    color: #e53e3e;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.event-schedules li {
+    margin: 4px 0;
+}
+
+.schedules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.schedule-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 10px;
+    background: #f7fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.schedule-fields {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+
+.schedule-remove-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: #fed7d7;
+    color: #9b2c2c;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.schedules-add-btn {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 10px 14px;
+    border: 1px dashed #667eea;
+    border-radius: 12px;
+    background: #edf2ff;
+    color: #434190;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+@media (min-width: 480px) {
+    .schedule-fields {
+        grid-template-columns: 1.2fr 1fr 1fr;
+    }
+}
+
 .event-desc {
     color: #4a5568;
     font-size: 14px;

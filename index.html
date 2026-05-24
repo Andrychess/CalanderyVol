@@ -50,15 +50,10 @@
                 <label class="field-label">Название события *</label>
                 <input type="text" id="eventTitle" required maxlength="200">
 
-                <label class="field-label">Дата *</label>
-                <input type="date" id="eventDate" required>
-                <p class="field-hint">Прошедшие даты сохраняются, но видны только в «Прошедшие мероприятия».</p>
-
-                <label class="field-label">Время начала *</label>
-                <input type="time" id="eventTime" required>
-
-                <label class="field-label">Время окончания</label>
-                <input type="time" id="eventTimeEnd">
+                <label class="field-label">Даты и время проведения *</label>
+                <div id="schedulesList" class="schedules-list"></div>
+                <button type="button" class="schedules-add-btn" id="addScheduleBtn">+ Добавить дату</button>
+                <p class="field-hint">Можно указать несколько дней. Если все даты прошли, карточка видна только в «Прошедшие мероприятия».</p>
 
                 <label class="field-label">Локация</label>
                 <input type="text" id="eventLocation" value="ЮРГПУ(НПИ)" maxlength="200">
@@ -89,7 +84,7 @@
                 <textarea id="eventDescription" rows="3" placeholder="Кратко о мероприятии"></textarea>
 
                 <label class="field-label">Текст кнопки</label>
-                <input type="text" id="eventButtonLabel" value="Перейти" maxlength="50">
+                <input type="text" id="eventButtonLabel" value="Подтвердить участие (перейти в информационный чат)" maxlength="100">
 
                 <label class="field-label">Ссылка или чат VK *</label>
                 <input type="url" id="eventButtonUrl" placeholder="https://vk.me/... или https://..." required>

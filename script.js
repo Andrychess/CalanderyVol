@@ -8,6 +8,8 @@ const EVENT_LEVELS = [
 ];
 
 const DEFAULT_LOCATION = "ЮРГПУ(НПИ)";
+const DEFAULT_BUTTON_LABEL =
+  "Подтвердить участие (перейти в информационный чат)";
 
 let events = [];
 let isAdmin = false;
@@ -36,10 +38,33 @@ function normalizeTextField(value) {
   return String(value);
 }
 
+function normalizeSchedule(raw) {
+  return {
+    date: raw?.date || "",
+    time: raw?.time || raw?.timeStart || "",
+    timeEnd: raw?.timeEnd || "",
+  };
+}
+
+function normalizeSchedules(raw) {
+  if (Array.isArray(raw?.schedules) && raw.schedules.length) {
+    return raw.schedules.map(normalizeSchedule).filter((item) => item.date);
+  }
+
+  const legacy = normalizeSchedule({
+    date: raw?.date,
+    time: raw?.time || raw?.timeStart,
+    timeEnd: raw?.timeEnd,
+  });
+
+  return legacy.date ? [legacy] : [];
+}
+
 function normalizeEvent(raw) {
   const functionality = normalizeTextField(raw.functionality ?? raw.tasks);
-
   const conditions = normalizeTextField(raw.conditions);
+  const schedules = normalizeSchedules(raw);
+  const first = schedules[0] || { date: "", time: "", timeEnd: "" };
 
   const enrollment =
     raw.enrollment === "closed" || raw.enrollmentStatus === "closed"
@@ -49,9 +74,10 @@ function normalizeEvent(raw) {
   return {
     id: String(raw.id || Date.now()),
     title: raw.title || "",
-    date: raw.date || "",
-    time: raw.time || raw.timeStart || "",
-    timeEnd: raw.timeEnd || "",
+    schedules,
+    date: first.date,
+    time: first.time,
+    timeEnd: first.timeEnd,
     location: raw.location || DEFAULT_LOCATION,
     level: EVENT_LEVELS.includes(raw.level)
       ? raw.level
@@ -60,7 +86,7 @@ function normalizeEvent(raw) {
     functionality,
     conditions,
     description: raw.description || "",
-    buttonLabel: raw.buttonLabel || "Перейти",
+    buttonLabel: raw.buttonLabel || DEFAULT_BUTTON_LABEL,
     buttonUrl: raw.buttonUrl || raw.link || "",
   };
 }
@@ -74,19 +100,42 @@ function mapLegacyLevel(level) {
   return map[level] || "региональный";
 }
 
-function getEventStartDate(event) {
-  const time = event.time || "00:00";
-  return new Date(`${event.date}T${time}`);
+function getEventSchedules(event) {
+  const schedules =
+    Array.isArray(event?.schedules) && event.schedules.length
+      ? event.schedules.map(normalizeSchedule)
+      : normalizeSchedules(event);
+
+  return schedules
+    .filter((item) => item.date)
+    .sort((a, b) => getScheduleStart(a) - getScheduleStart(b));
 }
 
-function getEventEndDate(event) {
-  const time = event.timeEnd || event.time || "23:59";
-  return new Date(`${event.date}T${time}`);
+function getScheduleStart(schedule) {
+  return new Date(`${schedule.date}T${schedule.time || "00:00"}`);
+}
+
+function getScheduleEnd(schedule) {
+  const time = schedule.timeEnd || schedule.time || "23:59";
+  return new Date(`${schedule.date}T${time}`);
+}
+
+function isSchedulePast(schedule) {
+  if (!schedule.date) return false;
+  return getScheduleEnd(schedule) < new Date();
 }
 
 function isEventPast(event) {
-  if (!event.date) return false;
-  return getEventEndDate(event) < new Date();
+  const schedules = getEventSchedules(event);
+  if (!schedules.length) return false;
+  return schedules.every(isSchedulePast);
+}
+
+function getEventSortDate(event) {
+  const schedules = getEventSchedules(event);
+  const upcoming = schedules.filter((item) => !isSchedulePast(item));
+  const target = upcoming.length ? upcoming : schedules;
+  return target.length ? getScheduleStart(target[0]) : new Date(0);
 }
 
 function formatLevelLabel(level) {
@@ -108,11 +157,83 @@ function formatDate(dateString) {
   });
 }
 
-function formatTimeRange(event) {
-  if (!event.time) return "";
-  return event.timeEnd
-    ? `${event.time} – ${event.timeEnd}`
-    : event.time;
+function formatScheduleLine(schedule) {
+  const datePart = formatDate(schedule.date);
+  if (!schedule.time) return datePart;
+  const timePart = schedule.timeEnd
+    ? `${schedule.time} – ${schedule.timeEnd}`
+    : schedule.time;
+  return `${datePart} · ${timePart}`;
+}
+
+function renderSchedulesList(event) {
+  const schedules = getEventSchedules(event);
+  if (!schedules.length) {
+    return '<p class="event-datetime">Дата не указана</p>';
+  }
+
+  if (schedules.length === 1) {
+    return `<p class="event-datetime">${escapeHtml(formatScheduleLine(schedules[0]))}</p>`;
+  }
+
+  return `
+    <ul class="event-schedules">
+      ${schedules.map((item) => `<li>${escapeHtml(formatScheduleLine(item))}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function createScheduleRow(schedule = {}) {
+  const row = document.createElement("div");
+  row.className = "schedule-row";
+  row.innerHTML = `
+    <div class="schedule-fields">
+      <div>
+        <label class="field-label">Дата *</label>
+        <input type="date" class="schedule-date" value="${escapeHtml(schedule.date || "")}" required>
+      </div>
+      <div>
+        <label class="field-label">Начало *</label>
+        <input type="time" class="schedule-time" value="${escapeHtml(schedule.time || "")}" required>
+      </div>
+      <div>
+        <label class="field-label">Конец</label>
+        <input type="time" class="schedule-time-end" value="${escapeHtml(schedule.timeEnd || "")}">
+      </div>
+    </div>
+    <button type="button" class="schedule-remove-btn" aria-label="Удалить дату">&times;</button>
+  `;
+
+  row.querySelector(".schedule-remove-btn").addEventListener("click", () => {
+    const list = document.getElementById("schedulesList");
+    if (list.children.length <= 1) {
+      setFormError("Нужна хотя бы одна дата проведения.");
+      return;
+    }
+    row.remove();
+    setFormError("");
+  });
+
+  return row;
+}
+
+function renderScheduleForm(schedules) {
+  const list = document.getElementById("schedulesList");
+  list.innerHTML = "";
+
+  const items = schedules?.length
+    ? schedules
+    : [{ date: getTodayDateString(), time: "", timeEnd: "" }];
+
+  items.forEach((item) => list.appendChild(createScheduleRow(item)));
+}
+
+function readSchedulesFromForm() {
+  return [...document.querySelectorAll("#schedulesList .schedule-row")].map((row) => ({
+    date: row.querySelector(".schedule-date").value,
+    time: row.querySelector(".schedule-time").value,
+    timeEnd: row.querySelector(".schedule-time-end").value,
+  }));
 }
 
 function escapeHtml(str) {
@@ -174,7 +295,7 @@ function getFilteredEvents() {
     list = list.filter((event) => Favorites.has(event.id));
   }
 
-  list.sort((a, b) => getEventStartDate(a) - getEventStartDate(b));
+  list.sort((a, b) => getEventSortDate(a) - getEventSortDate(b));
   return list;
 }
 
@@ -330,7 +451,7 @@ function renderEvents() {
           <div class="card-top-row">
             <div class="event-header">
               <h2 class="event-title">${escapeHtml(event.title)}</h2>
-              <p class="event-datetime">${escapeHtml(formatDate(event.date))} · ${escapeHtml(formatTimeRange(event))}</p>
+              ${renderSchedulesList(event)}
               <p class="event-location">📍 ${escapeHtml(event.location)}</p>
             </div>
             <button type="button" class="favorite-btn no-export ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
@@ -367,7 +488,7 @@ function renderEvents() {
 
           <div class="card-actions no-export">
             <a class="join-btn" href="${escapeHtml(VkAuth.normalizeLink(event.buttonUrl))}" target="_blank" rel="noopener noreferrer">
-              ${escapeHtml(event.buttonLabel || "Перейти")}
+              ${escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL)}
             </a>
             <button type="button" class="secondary-btn" data-action="share" data-id="${escapeHtml(event.id)}">Поделиться</button>
             <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Сохранить PNG</button>
@@ -387,11 +508,15 @@ function renderEvents() {
     .join("");
 
   container.querySelectorAll(".join-btn").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    btn.addEventListener("click", (e) => {
       const url = btn.getAttribute("href") || btn.dataset.url;
-      await VkAuth.openLink(url);
+      if (!url) return;
+
+      // В VK открываем через Bridge; вне VK оставляем нативный переход по ссылке.
+      if (VkAuth.isVkEnvironment) {
+        e.preventDefault();
+        VkAuth.openLink(url);
+      }
     });
   });
 
@@ -453,11 +578,11 @@ function openAddModal() {
   document.getElementById("modalTitle").textContent = "Новое мероприятие";
   document.getElementById("eventForm").reset();
   document.getElementById("eventId").value = "";
-  document.getElementById("eventButtonLabel").value = "Перейти";
+  document.getElementById("eventButtonLabel").value = DEFAULT_BUTTON_LABEL;
   document.getElementById("eventLevel").value = "региональный";
   document.getElementById("eventLocation").value = DEFAULT_LOCATION;
   document.getElementById("eventEnrollment").value = "open";
-  document.getElementById("eventDate").value = getTodayDateString();
+  renderScheduleForm([{ date: getTodayDateString(), time: "", timeEnd: "" }]);
   setFormError("");
   showModal(true);
 }
@@ -470,9 +595,7 @@ function openEditModal(eventId) {
   document.getElementById("modalTitle").textContent = "Редактировать мероприятие";
   document.getElementById("eventId").value = event.id;
   document.getElementById("eventTitle").value = event.title;
-  document.getElementById("eventDate").value = event.date;
-  document.getElementById("eventTime").value = event.time;
-  document.getElementById("eventTimeEnd").value = event.timeEnd || "";
+  renderScheduleForm(getEventSchedules(event));
   document.getElementById("eventLocation").value = event.location;
   document.getElementById("eventLevel").value = event.level;
   document.getElementById("eventEnrollment").value = event.enrollment;
@@ -492,12 +615,14 @@ function showModal(visible) {
 }
 
 function readFormData() {
+  const schedules = readSchedulesFromForm().filter(
+    (item) => item.date && item.time
+  );
+
   return normalizeEvent({
     id: document.getElementById("eventId").value || generateEventId(),
     title: document.getElementById("eventTitle").value.trim(),
-    date: document.getElementById("eventDate").value,
-    time: document.getElementById("eventTime").value,
-    timeEnd: document.getElementById("eventTimeEnd").value,
+    schedules,
     location: document.getElementById("eventLocation").value.trim(),
     level: document.getElementById("eventLevel").value,
     enrollment: document.getElementById("eventEnrollment").value,
@@ -520,8 +645,10 @@ async function handleFormSubmit(event) {
   try {
     const eventData = readFormData();
 
-    if (!eventData.title || !eventData.date || !eventData.buttonUrl) {
-      setFormError("Заполните обязательные поля.");
+    if (!eventData.title || !eventData.schedules.length || !eventData.buttonUrl) {
+      setFormError(
+        "Заполните название, ссылку и хотя бы одну дату с временем начала."
+      );
       return;
     }
 
@@ -641,6 +768,12 @@ function setupFilters() {
 
 function setupModal() {
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
+  document.getElementById("addScheduleBtn").addEventListener("click", () => {
+    document
+      .getElementById("schedulesList")
+      .appendChild(createScheduleRow({ date: getTodayDateString() }));
+    setFormError("");
+  });
   document.getElementById("modalClose").addEventListener("click", () => showModal(false));
   document.getElementById("eventForm").addEventListener("submit", handleFormSubmit);
 
