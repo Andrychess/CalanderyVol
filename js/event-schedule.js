@@ -1,20 +1,39 @@
-/** Окно «Расписание»: регламент (простой список) + волонтерская смена (Гант) */
+/** Страница «Расписание»: регламент + волонтерская смена (Гант) */
 const EventSchedule = {
   eventId: null,
   tab: "regulations",
   draft: null,
   _ready: false,
 
+  VK_PARAMS: ["vk_platform", "vk_user_id", "vk_group_id", "vk_app_id", "vk_ref"],
+
+  appendVkParams(url) {
+    const current = new URLSearchParams(window.location.search);
+    this.VK_PARAMS.forEach((key) => {
+      if (current.has(key)) {
+        url.searchParams.set(key, current.get(key));
+      }
+    });
+    return url;
+  },
+
+  getPageUrl(eventId) {
+    const url = new URL("schedule.html", window.location.href);
+    url.searchParams.set("event", eventId);
+    this.appendVkParams(url);
+    return url.pathname + url.search;
+  },
+
+  getIndexUrl() {
+    const url = new URL("index.html", window.location.href);
+    this.appendVkParams(url);
+    return url.pathname + url.search;
+  },
+
   init() {
     if (this._ready) return;
     this._ready = true;
 
-    document.getElementById("scheduleClose")?.addEventListener("click", () => {
-      this.close();
-    });
-    document.getElementById("scheduleModal")?.addEventListener("click", (e) => {
-      if (e.target.id === "scheduleModal") this.close();
-    });
     document.getElementById("scheduleSaveBtn")?.addEventListener("click", () => {
       this.save(false);
     });
@@ -24,6 +43,7 @@ const EventSchedule = {
 
     document.querySelectorAll(".schedule-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
+        this.syncDraftFromDom();
         this.tab = btn.dataset.tab;
         this.render();
       });
@@ -38,8 +58,16 @@ const EventSchedule = {
     };
   },
 
-  normalizePlan(raw) {
-    const plan = raw?.plan || this.emptyPlan();
+  normalizePlan(input) {
+    const plan =
+      input?.plan && typeof input.plan === "object"
+        ? input.plan
+        : input?.regulations !== undefined ||
+            input?.volunteerDays !== undefined ||
+            input?.published !== undefined
+          ? input
+          : this.emptyPlan();
+
     const regulations = Array.isArray(plan.regulations)
       ? plan.regulations.map((item) => this.normalizeRegulation(item))
       : [];
@@ -49,7 +77,9 @@ const EventSchedule = {
 
     return {
       published: Boolean(plan.published),
-      regulations: regulations.filter((item) => item.title || item.time),
+      regulations: regulations.filter(
+        (item) => item.title || item.time || item.note
+      ),
       volunteerDays: volunteerDays.filter((day) => day.date),
     };
   },
@@ -96,8 +126,12 @@ const EventSchedule = {
 
   hasContent(plan) {
     if (!plan) return false;
-    if (plan.regulations?.length) return true;
-    return plan.volunteerDays?.some((day) => day.rows?.length);
+    if (plan.regulations?.some((item) => item.title || item.time || item.note)) {
+      return true;
+    }
+    return plan.volunteerDays?.some((day) =>
+      day.rows?.some((row) => row.label || row.shifts?.length)
+    );
   },
 
   canView(event) {
@@ -114,32 +148,17 @@ const EventSchedule = {
     return events.find((item) => String(item.id) === String(this.eventId));
   },
 
-  open(eventId) {
+  loadPage(eventId) {
     const event = events.find((item) => String(item.id) === String(eventId));
-    if (!event) return;
-    if (!isAdmin && !this.canView(event)) return;
+    if (!event) return false;
+    if (!isAdmin && !this.canView(event)) return false;
 
     this.eventId = eventId;
     this.tab = "regulations";
     this.draft = structuredClone(event.plan || this.emptyPlan());
     this.ensureVolunteerDays(this.draft, event);
-
-    const modal = document.getElementById("scheduleModal");
-    modal.classList.add("open");
-    modal.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
     this.render();
-  },
-
-  close() {
-    const modal = document.getElementById("scheduleModal");
-    modal.classList.remove("open");
-    modal.setAttribute("aria-hidden", "true");
-    if (!document.getElementById("eventViewModal")?.classList.contains("open")) {
-      document.body.style.overflow = "";
-    }
-    this.eventId = null;
-    this.draft = null;
+    return true;
   },
 
   ensureVolunteerDays(plan, event) {
@@ -170,8 +189,8 @@ const EventSchedule = {
     const event = this.getEvent();
     if (!event || !this.draft) return;
 
-    document.getElementById("scheduleModalTitle").textContent = event.title;
-    document.getElementById("scheduleModalSubtitle").textContent =
+    document.getElementById("schedulePageTitle").textContent = event.title;
+    document.getElementById("schedulePageSubtitle").textContent =
       getEventSchedules(event)
         .map((item) => formatScheduleLine(item))
         .join(" · ") || "Даты не указаны";
@@ -225,7 +244,7 @@ const EventSchedule = {
         </ol>
         ${
           !items.length && editable
-            ? `<p class="schedule-hint">Добавьте пункты: время и название этапа (например, «09:00 — Сбор участников»).</p>`
+            ? `<p class="schedule-hint">Пункты регламента необязательны. Можно указать только время, только название или оба поля.</p>`
             : ""
         }
       </section>
@@ -256,7 +275,7 @@ const EventSchedule = {
     return `
       <li class="regulation-item regulation-item--edit" data-reg-id="${escapeAttr(item.id)}">
         <div class="regulation-edit__times">
-          <input type="time" class="regulation-time" value="${escapeAttr(item.time)}" required>
+          <input type="time" class="regulation-time" value="${escapeAttr(item.time)}">
           <span>—</span>
           <input type="time" class="regulation-time-end" value="${escapeAttr(item.timeEnd)}">
         </div>
@@ -392,8 +411,13 @@ const EventSchedule = {
 
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
       this.syncDraftFromDom();
+      const first = getEventSchedules(event)[0];
       this.draft.regulations.push(
-        this.normalizeRegulation({ time: "09:00", title: "" })
+        this.normalizeRegulation({
+          time: first?.time || "",
+          timeEnd: first?.timeEnd || "",
+          title: "",
+        })
       );
       this.render();
     });
@@ -414,7 +438,13 @@ const EventSchedule = {
       this.syncDraftFromDom();
       const day = this.getSelectedVolunteerDay();
       if (!day) return;
-      day.rows.push(this.normalizeVolunteerRow({ label: "" }));
+      const range = this.getDayRange(event, day.date);
+      day.rows.push(
+        this.normalizeVolunteerRow({
+          label: "",
+          shifts: [{ from: range.from, to: range.to }],
+        })
+      );
       this.render();
     });
 
@@ -435,7 +465,10 @@ const EventSchedule = {
         const day = this.getSelectedVolunteerDay();
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
-        row.shifts.push(this.normalizeShift({ from: "09:00", to: "12:00" }));
+        const range = this.getDayRange(event, day.date);
+        row.shifts.push(
+          this.normalizeShift({ from: range.from, to: range.to })
+        );
         this.render();
       });
     });
@@ -472,6 +505,8 @@ const EventSchedule = {
     });
     this.draft.regulations = regulations;
 
+    if (this.tab !== "volunteer") return;
+
     const day = this.getSelectedVolunteerDay();
     if (!day) return;
 
@@ -505,7 +540,7 @@ const EventSchedule = {
     if (publish) {
       if (!this.draft.published && !this.hasContent(this.draft)) {
         alert(
-          "Добавьте хотя бы один пункт регламента или строку волонтерской смены перед публикацией."
+          "Добавьте содержимое расписания перед публикацией (регламент необязателен)."
         );
         return;
       }
@@ -523,7 +558,9 @@ const EventSchedule = {
       const updated = this.getEvent();
       this.draft = structuredClone(updated?.plan || this.emptyPlan());
       this.render();
-      renderCurrentView();
+      if (document.getElementById("eventsContainer")) {
+        renderCurrentView();
+      }
 
       const msg = publish
         ? this.draft.published
@@ -538,16 +575,19 @@ const EventSchedule = {
 
   getDayRange(event, date) {
     const eventDay = getEventSchedules(event).find((item) => item.date === date);
-    let from = eventDay?.time || "08:00";
-    let to = eventDay?.timeEnd || "20:00";
+    if (!eventDay) {
+      return { from: "08:00", to: "20:00" };
+    }
 
-    if (!eventDay?.timeEnd && eventDay?.time) {
-      const start = this.timeToMinutes(eventDay.time);
-      to = this.minutesToTime(Math.min(start + 12 * 60, 23 * 60 + 59));
+    const from = eventDay.time || "08:00";
+    let to = eventDay.timeEnd || "";
+
+    if (!to) {
+      to = eventDay.time ? "23:59" : "20:00";
     }
 
     if (this.timeToMinutes(from) >= this.timeToMinutes(to)) {
-      to = this.minutesToTime(this.timeToMinutes(from) + 4 * 60);
+      to = this.minutesToTime(this.timeToMinutes(from) + 60);
     }
 
     return { from, to };

@@ -455,15 +455,22 @@ function getFilteredEvents() {
 
 async function loadEvents() {
   const container = document.getElementById("eventsContainer");
-  container.innerHTML = '<div class="loading">Загрузка мероприятий...</div>';
+  if (container) {
+    container.innerHTML = '<div class="loading">Загрузка мероприятий...</div>';
+  }
 
   try {
     events = (await JsonBoxStorage.getEvents()).map(normalizeEvent);
-    renderCurrentView();
+    if (container) {
+      renderCurrentView();
+    }
   } catch (error) {
     console.error(error);
-    container.innerHTML = `<div class="error-msg">Не удалось загрузить данные: ${escapeHtml(error.message)}</div>`;
-    setSubtitle("Ошибка загрузки");
+    if (container) {
+      container.innerHTML = `<div class="error-msg">Не удалось загрузить данные: ${escapeHtml(error.message)}</div>`;
+      setSubtitle("Ошибка загрузки");
+    }
+    throw error;
   }
 }
 
@@ -574,7 +581,7 @@ function renderEventCard(event, options = {}) {
         <div class="card-top-actions no-export">
           ${
             showScheduleBtn
-              ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
+              ? `<a class="schedule-card-btn" href="${escapeAttr(EventSchedule.getPageUrl(event.id))}">${escapeHtml(scheduleBtnLabel)}</a>`
               : ""
           }
           <button type="button" class="favorite-btn ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
@@ -637,12 +644,6 @@ function renderEventCard(event, options = {}) {
 
 function bindEventCardActions(container) {
   if (!container) return;
-
-  container.querySelectorAll("[data-action=open-schedule]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      EventSchedule.open(btn.dataset.id);
-    });
-  });
 
   container.querySelectorAll("[data-action=copy-info]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -1074,9 +1075,8 @@ async function bootstrap() {
     updateAdminUi();
     setupFilters();
     setupViewSwitch();
-  CalendarView.init();
-  EventSchedule.init();
-  setupModal();
+    CalendarView.init();
+    setupModal();
     await loadEvents();
   } catch (error) {
     console.error(error);
@@ -1090,4 +1090,6 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+if (!document.body.classList.contains("schedule-page")) {
+  bootstrap();
+}
