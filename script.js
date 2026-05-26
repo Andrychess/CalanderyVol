@@ -82,6 +82,7 @@ function normalizeEvent(raw) {
     description: raw.description || "",
     buttonLabel: raw.buttonLabel || DEFAULT_BUTTON_LABEL,
     buttonUrl: raw.buttonUrl || raw.link || "",
+    plan: EventSchedule.normalizePlan(raw),
   };
 }
 
@@ -558,6 +559,9 @@ function renderEventCard(event, options = {}) {
   const isFavorite = Favorites.has(event.id);
   const enrollmentClass =
     event.enrollment === "closed" ? "enrollment-closed" : "enrollment-open";
+  const showScheduleBtn =
+    isAdmin || EventSchedule.canView(event);
+  const scheduleBtnLabel = EventSchedule.getCardButtonLabel();
 
   return `
     <article class="event-card ${isEventPast(event) ? "event-card-past" : ""}" data-id="${escapeHtml(event.id)}">
@@ -567,7 +571,14 @@ function renderEventCard(event, options = {}) {
           ${renderSchedulesList(event)}
           <p class="event-location">📍 ${escapeHtml(event.location)}</p>
         </div>
-        <button type="button" class="favorite-btn no-export ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
+        <div class="card-top-actions no-export">
+          ${
+            showScheduleBtn
+              ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
+              : ""
+          }
+          <button type="button" class="favorite-btn ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
+        </div>
       </div>
 
       <div class="badge-row">
@@ -626,6 +637,12 @@ function renderEventCard(event, options = {}) {
 
 function bindEventCardActions(container) {
   if (!container) return;
+
+  container.querySelectorAll("[data-action=open-schedule]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      EventSchedule.open(btn.dataset.id);
+    });
+  });
 
   container.querySelectorAll("[data-action=copy-info]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -838,6 +855,11 @@ function readFormData() {
     description: document.getElementById("eventDescription").value.trim(),
     buttonLabel: document.getElementById("eventButtonLabel").value.trim(),
     buttonUrl: document.getElementById("eventButtonUrl").value.trim(),
+    plan:
+      events.find(
+        (item) =>
+          String(item.id) === String(document.getElementById("eventId").value)
+      )?.plan || EventSchedule.emptyPlan(),
   });
 }
 
@@ -1052,8 +1074,9 @@ async function bootstrap() {
     updateAdminUi();
     setupFilters();
     setupViewSwitch();
-    CalendarView.init();
-    setupModal();
+  CalendarView.init();
+  EventSchedule.init();
+  setupModal();
     await loadEvents();
   } catch (error) {
     console.error(error);

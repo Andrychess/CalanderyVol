@@ -407,6 +407,38 @@ body.app-shell {
   min-width: 0;
 }
 
+.card-top-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 42%;
+}
+
+.schedule-card-btn {
+  border: 1px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: right;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--transition);
+}
+
+.schedule-card-btn:active {
+  background: var(--surface-hover);
+}
+
+[data-theme="dark"] .schedule-card-btn {
+  color: #8ecae6;
+}
+
 .event-header {
   border-left: 4px solid var(--accent);
   padding-left: 12px;
@@ -1678,4 +1710,326 @@ form textarea:focus {
   font-weight: 600;
   color: #5c7a96;
   border-top: 1px solid #e2e8f0;
+}
+
+/* ── Schedule modal ── */
+.schedule-modal-content {
+  max-width: 560px;
+  padding-top: 18px;
+}
+
+.schedule-modal__header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding-right: 40px;
+  margin-bottom: 14px;
+}
+
+.schedule-modal__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.schedule-modal__header h2 {
+  font-size: 1.125rem;
+  font-weight: 800;
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+
+.schedule-modal__subtitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.schedule-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  background: var(--surface-muted);
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.schedule-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px 8px;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.schedule-tab.active {
+  background: var(--primary);
+  color: var(--text-inverse);
+}
+
+.schedule-panel {
+  max-height: min(58vh, 520px);
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.schedule-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.schedule-empty,
+.schedule-hint {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.schedule-day-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.schedule-day-select {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.regulation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.regulation-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+
+.regulation-item__time {
+  flex-shrink: 0;
+  min-width: 72px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.regulation-item__body strong {
+  display: block;
+  font-size: 0.9375rem;
+  margin-bottom: 4px;
+}
+
+.regulation-item__note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.regulation-item--edit {
+  flex-direction: column;
+  position: relative;
+  padding-right: 36px;
+}
+
+.regulation-edit__times {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.regulation-edit__times input,
+.regulation-title,
+.regulation-note,
+.gantt-row-label,
+.gantt-shift-edit input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.875rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.schedule-remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.schedule-remove-btn--sm {
+  position: static;
+  flex-shrink: 0;
+}
+
+.schedule-admin-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.schedule-admin-bar .secondary-btn,
+.schedule-admin-bar .submit-btn {
+  width: 100%;
+  margin: 0;
+}
+
+/* Gantt */
+.gantt-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.gantt {
+  min-width: 520px;
+}
+
+.gantt__head,
+.gantt__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.gantt__head {
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.gantt__label-col {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.gantt__scale {
+  display: grid;
+  grid-template-columns: repeat(var(--gantt-cols, 4), 1fr);
+  gap: 4px;
+}
+
+.gantt__scale span {
+  text-align: center;
+}
+
+.gantt__row {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gantt__row:last-child {
+  border-bottom: none;
+}
+
+.gantt__track {
+  position: relative;
+  min-height: 32px;
+  background: rgba(38, 105, 184, 0.06);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  min-width: 48px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent) 0%, #5aa862 100%);
+  color: #fff;
+  font-size: 0.625rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.gantt__row--edit {
+  grid-template-columns: 1fr;
+  position: relative;
+  padding-right: 36px;
+}
+
+.gantt-shifts-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.gantt-shift-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.gantt-shift-edit .shift-from,
+.gantt-shift-edit .shift-to {
+  width: auto;
+  flex: 0 0 96px;
+}
+
+.gantt-shift-edit .shift-note {
+  flex: 1 1 140px;
+}
+
+.gantt-add-shift {
+  align-self: flex-start;
+  border: 1px dashed var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
 }

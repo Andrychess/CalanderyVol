@@ -65,6 +65,30 @@
         </div>
     </div>
 
+    <div id="scheduleModal" class="modal schedule-modal" aria-hidden="true">
+        <div class="modal-content schedule-modal-content">
+            <div class="schedule-modal__header">
+                <div class="schedule-modal__titles">
+                    <h2 id="scheduleModalTitle">Расписание</h2>
+                    <p id="scheduleModalSubtitle" class="schedule-modal__subtitle"></p>
+                </div>
+                <button type="button" class="close" id="scheduleClose" aria-label="Закрыть">&times;</button>
+            </div>
+
+            <div class="schedule-tabs" role="tablist" aria-label="Разделы расписания">
+                <button type="button" class="schedule-tab active" data-tab="regulations" role="tab" aria-selected="true">Регламент мероприятия</button>
+                <button type="button" class="schedule-tab" data-tab="volunteer" role="tab" aria-selected="false">Волонтерская смена</button>
+            </div>
+
+            <div id="schedulePanel" class="schedule-panel"></div>
+
+            <div id="scheduleAdminBar" class="schedule-admin-bar hidden">
+                <button type="button" class="secondary-btn" id="scheduleSaveBtn">Сохранить</button>
+                <button type="button" class="submit-btn" id="schedulePublishBtn">Опубликовать расписание</button>
+            </div>
+        </div>
+    </div>
+
     <div id="eventModal" class="modal" aria-hidden="true">
         <div class="modal-content">
             <button type="button" class="close" id="modalClose" aria-label="Закрыть">&times;</button>
@@ -125,6 +149,7 @@
     <script src="js/export-png.js"></script>
     <script src="js/level-colors.js"></script>
     <script src="js/calendar-view.js"></script>
+    <script src="js/event-schedule.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
