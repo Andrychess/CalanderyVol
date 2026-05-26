@@ -5,7 +5,7 @@ async function bootstrapSchedulePage() {
   try {
     ensureConfig();
     await VkAuth.init();
-    isAdmin = await resolveAdminAccess();
+    await initAdminAccess();
     await loadEvents();
 
     const params = new URLSearchParams(window.location.search);
@@ -17,6 +17,8 @@ async function bootstrapSchedulePage() {
     }
 
     EventSchedule.init();
+    setupAdminPreviewToggle();
+    updateAdminPreviewToggle();
     const ok = EventSchedule.loadPage(eventId);
     if (!ok) {
       panel.innerHTML =

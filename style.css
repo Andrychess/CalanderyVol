@@ -1717,7 +1717,15 @@ form textarea:focus {
 
 /* ── Schedule page ── */
 .schedule-page__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
+}
+
+.schedule-page__top .toggle-btn {
+  flex-shrink: 0;
 }
 
 .schedule-back-btn {

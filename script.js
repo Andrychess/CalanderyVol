@@ -5,6 +5,8 @@ const DEFAULT_BUTTON_LABEL =
   "Подтвердить участие (перейти в информационный чат)";
 
 let events = [];
+let hasAdminAccess = false;
+let adminPreviewAsUser = false;
 let isAdmin = false;
 let editingEventId = null;
 let viewMode = "list";
@@ -15,6 +17,8 @@ const filterState = {
   favoritesOnly: false,
   showPast: false,
 };
+
+const ADMIN_PREVIEW_STORAGE_KEY = "cal_admin_preview_as_user";
 
 function ensureConfig() {
   if (!window.APP_CONFIG) {
@@ -740,7 +744,7 @@ function setViewMode(mode) {
 }
 
 function renderCurrentView() {
-  if (isAdmin) {
+  if (hasAdminAccess) {
     updateAdminUi();
   }
 
@@ -973,11 +977,104 @@ async function resolveAdminAccess() {
   return false;
 }
 
+function loadAdminPreviewPreference() {
+  try {
+    adminPreviewAsUser =
+      sessionStorage.getItem(ADMIN_PREVIEW_STORAGE_KEY) === "1";
+  } catch {
+    adminPreviewAsUser = false;
+  }
+}
+
+function saveAdminPreviewPreference() {
+  try {
+    sessionStorage.setItem(
+      ADMIN_PREVIEW_STORAGE_KEY,
+      adminPreviewAsUser ? "1" : "0"
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function applyAdminAccessState() {
+  isAdmin = hasAdminAccess && !adminPreviewAsUser;
+}
+
+async function initAdminAccess() {
+  hasAdminAccess = await resolveAdminAccess();
+  loadAdminPreviewPreference();
+  applyAdminAccessState();
+}
+
+function updateAdminPreviewToggle() {
+  const btn = document.getElementById("adminPreviewToggleBtn");
+  if (!btn) return;
+
+  btn.classList.toggle("hidden", !hasAdminAccess);
+  if (!hasAdminAccess) return;
+
+  btn.textContent = adminPreviewAsUser
+    ? "Режим администратора"
+    : "Как пользователь";
+  btn.classList.toggle("active", adminPreviewAsUser);
+  btn.setAttribute("aria-pressed", adminPreviewAsUser ? "true" : "false");
+  btn.title = adminPreviewAsUser
+    ? "Вернуться к инструментам управления"
+    : "Посмотреть приложение глазами участника";
+}
+
+function toggleAdminPreviewMode() {
+  if (!hasAdminAccess) return;
+
+  adminPreviewAsUser = !adminPreviewAsUser;
+  saveAdminPreviewPreference();
+  applyAdminAccessState();
+
+  if (adminPreviewAsUser) {
+    filterState.showPast = false;
+  }
+
+  updateAdminUi();
+  renderCurrentView();
+  refreshSchedulePageAccess();
+}
+
+function refreshSchedulePageAccess() {
+  if (!document.body.classList.contains("schedule-page")) return;
+  if (typeof EventSchedule === "undefined" || !EventSchedule.eventId) return;
+
+  const event = EventSchedule.getEvent();
+  const panel = document.getElementById("schedulePanel");
+  const adminBar = document.getElementById("scheduleAdminBar");
+
+  if (!event || (!isAdmin && !EventSchedule.canView(event))) {
+    if (panel) {
+      panel.innerHTML =
+        '<div class="error-msg">Расписание недоступно или мероприятие не найдено.</div>';
+    }
+    adminBar?.classList.add("hidden");
+    return;
+  }
+
+  EventSchedule.volunteerEditOpen = false;
+  EventSchedule.render();
+}
+
+function setupAdminPreviewToggle() {
+  const btn = document.getElementById("adminPreviewToggleBtn");
+  if (!btn || btn.dataset.bound === "1") return;
+
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", toggleAdminPreviewMode);
+}
+
 function updateAdminUi() {
-  document.getElementById("adminToolbar").classList.toggle("hidden", !isAdmin);
+  updateAdminPreviewToggle();
+  document.getElementById("adminToolbar")?.classList.toggle("hidden", !isAdmin);
   document
     .getElementById("pastEventsFilterBtn")
-    .classList.toggle("hidden", !isAdmin);
+    ?.classList.toggle("hidden", !isAdmin);
 
   const deletePastBtn = document.getElementById("deleteAllPastBtn");
   if (deletePastBtn) {
@@ -997,6 +1094,8 @@ function updateAdminUi() {
         ? "Архив прошедших мероприятий"
         : "Руководство сообщества: актуальные мероприятия"
     );
+  } else if (hasAdminAccess && adminPreviewAsUser) {
+    setSubtitle("Просмотр как участник");
   } else {
     setSubtitle("Актуальные мероприятия");
   }
@@ -1071,8 +1170,9 @@ async function bootstrap() {
     ensureConfig();
     await VkAuth.init();
     await Favorites.load();
-    isAdmin = await resolveAdminAccess();
+    await initAdminAccess();
     updateAdminUi();
+    setupAdminPreviewToggle();
     setupFilters();
     setupViewSwitch();
     CalendarView.init();
