@@ -5,6 +5,7 @@ const EventSchedule = {
   draft: null,
   volunteerEditOpen: false,
   regulationShowPast: false,
+  regulationDayDate: null,
   _regulationTimer: null,
   _ready: false,
 
@@ -41,8 +42,12 @@ const EventSchedule = {
 
     document.querySelectorAll(".schedule-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncRegulationsFromDom();
-        this.syncVolunteerFromDom();
+        if (this.tab === "regulations") {
+          this.syncRegulationsFromDom();
+        }
+        if (this.tab === "volunteer") {
+          this.syncVolunteerFromDom();
+        }
         this.tab = btn.dataset.tab;
         this.render();
       });
@@ -187,9 +192,14 @@ const EventSchedule = {
     this.eventId = eventId;
     this.tab = "regulations";
     this.regulationShowPast = false;
+    this.regulationDayDate = null;
     this.draft = structuredClone(event.plan || this.emptyPlan());
     this.ensureRegulationDays(this.draft, event);
     this.ensureVolunteerDays(this.draft, event);
+    this.regulationDayDate = this.getDefaultRegulationDate(
+      event,
+      this.draft.regulationDays
+    );
     this.render();
     return true;
   },
@@ -275,12 +285,72 @@ const EventSchedule = {
   getSelectedRegulationDay(event) {
     const days = this.draft?.regulationDays || [];
     if (!days.length) return null;
-    const select = document.getElementById("regulationDaySelect");
-    const defaultDate = event
-      ? this.getDefaultRegulationDate(event, days)
+
+    const eventRef = event || this.getEvent();
+    const defaultDate = eventRef
+      ? this.getDefaultRegulationDate(eventRef, days)
       : days[0].date;
-    const date = select?.value || defaultDate;
-    return days.find((day) => day.date === date) || days[0];
+    const date = this.regulationDayDate || defaultDate;
+    const day = days.find((item) => item.date === date);
+
+    if (day) return day;
+
+    this.regulationDayDate = days[0].date;
+    return days[0];
+  },
+
+  formatRegulationDayTabLabel(date, event) {
+    if (!date) return "День";
+    const shortDate = new Date(date + "T12:00:00").toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+    });
+    const schedule = getEventSchedules(event).find((item) => item.date === date);
+    if (!schedule?.time) return shortDate;
+    const time = schedule.timeEnd
+      ? `${schedule.time}–${schedule.timeEnd}`
+      : schedule.time;
+    return `${shortDate} · ${time}`;
+  },
+
+  renderRegulationDayTabs(days, selectedDate, event) {
+    if (!days.length) {
+      return `<p class="schedule-day-label">Дни мероприятия не указаны</p>`;
+    }
+
+    const activeDate =
+      selectedDate ||
+      (event
+        ? this.getDefaultRegulationDate(event, days)
+        : days[0].date);
+
+    return `
+      <div class="regulation-day-tabs" role="tablist" aria-label="Дни регламента">
+        ${days
+          .map((day) => {
+            const isActive = day.date === activeDate;
+            const count = day.items?.length || 0;
+            return `
+              <button
+                type="button"
+                class="regulation-day-tab ${isActive ? "active" : ""}"
+                data-action="select-regulation-day"
+                data-date="${escapeAttr(day.date)}"
+                role="tab"
+                aria-selected="${isActive ? "true" : "false"}"
+              >
+                <span class="regulation-day-tab__label">${escapeHtml(this.formatRegulationDayTabLabel(day.date, event))}</span>
+                ${
+                  count
+                    ? `<span class="regulation-day-tab__count">${count}</span>`
+                    : ""
+                }
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
   },
 
   getSelectedVolunteerDay() {
@@ -383,6 +453,11 @@ const EventSchedule = {
       date: "",
       items: [],
     };
+    const dayTabs = this.renderRegulationDayTabs(
+      days,
+      day.date,
+      event
+    );
     const sortedItems = [...(day.items || [])].sort(
       (a, b) => this.timeToMinutes(a.time) - this.timeToMinutes(b.time)
     );
@@ -418,27 +493,32 @@ const EventSchedule = {
 
     if (!dayHasContent && !editable) {
       return `
-        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
-        <p class="schedule-empty">Регламент на этот день пока не добавлен.</p>
+        <section class="schedule-section" data-regulation-date="${escapeAttr(day.date)}">
+          ${dayTabs}
+          <p class="schedule-empty">Регламент на этот день пока не добавлен.</p>
+        </section>
       `;
     }
 
     if (!visibleItems.length && !editable && pastCount > 0) {
       return `
-        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
-        <p class="schedule-empty">На выбранный день все пункты регламента уже прошли.</p>
-        <button type="button" class="toggle-btn regulation-past-toggle" data-action="toggle-regulation-past">
-          Показать прошедшие (${pastCount})
-        </button>
+        <section class="schedule-section" data-regulation-date="${escapeAttr(day.date)}">
+          ${dayTabs}
+          <p class="schedule-empty">На выбранный день все пункты регламента уже прошли.</p>
+          <button type="button" class="toggle-btn regulation-past-toggle" data-action="toggle-regulation-past">
+            Показать прошедшие (${pastCount})
+          </button>
+          ${this.renderScheduleExportBtn("export-regulation-png", "Скачать регламент PNG")}
+        </section>
       `;
     }
 
     return `
-      <section class="schedule-section">
-        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
+      <section class="schedule-section" data-regulation-date="${escapeAttr(day.date)}">
+        ${dayTabs}
         ${
           editable
-            ? `<button type="button" class="schedules-add-btn" data-action="add-regulation">+ Пункт регламента</button>`
+            ? `<button type="button" class="schedules-add-btn" data-action="add-regulation">+ Пункт регламента на ${escapeHtml(formatDate(day.date) || "этот день")}</button>`
             : pastCount > 0
               ? `<button type="button" class="toggle-btn regulation-past-toggle ${this.regulationShowPast ? "active" : ""}" data-action="toggle-regulation-past">
                   ${this.regulationShowPast ? "Скрыть прошедшие" : `Показать прошедшие (${pastCount})`}
@@ -466,9 +546,10 @@ const EventSchedule = {
         </ol>
         ${
           !dayHasContent && editable
-            ? `<p class="schedule-hint">Пункты регламента необязательны и задаются отдельно для каждого дня мероприятия.</p>`
+            ? `<p class="schedule-hint">Пункты добавляются отдельно для каждого дня. Переключайте вкладки выше.</p>`
             : ""
         }
+        ${dayHasContent ? this.renderScheduleExportBtn("export-regulation-png", "Скачать регламент PNG") : ""}
       </section>
     `;
   },
@@ -559,6 +640,15 @@ const EventSchedule = {
           ? `<button type="button" class="schedules-add-btn" data-action="add-volunteer-row">+ Участник / роль</button>`
           : ""
       }
+      ${day.rows.length ? this.renderScheduleExportBtn("export-volunteer-png", "Скачать смену PNG") : ""}
+    `;
+  },
+
+  renderScheduleExportBtn(action, label) {
+    return `
+      <div class="schedule-export-bar">
+        <button type="button" class="secondary-btn schedule-export-btn" data-action="${escapeAttr(action)}">${escapeHtml(label)}</button>
+      </div>
     `;
   },
 
@@ -640,15 +730,23 @@ const EventSchedule = {
     const panel = document.getElementById("schedulePanel");
     if (!panel) return;
 
-    panel
-      .querySelector("#regulationDaySelect")
-      ?.addEventListener("change", () => {
+    this.bindScheduleExportActions(event);
+
+    panel.querySelectorAll("[data-action=select-regulation-day]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const nextDate = btn.dataset.date;
+        if (nextDate === this.regulationDayDate) return;
+
         if (isAdmin) {
           this.syncRegulationsFromDom();
           this.syncVolunteerFromDom();
         }
+
+        this.regulationDayDate = nextDate;
+        this.regulationShowPast = false;
         this.render();
       });
+    });
 
     panel
       .querySelector("[data-action=toggle-regulation-past]")
@@ -764,17 +862,91 @@ const EventSchedule = {
     });
   },
 
+  bindScheduleExportActions(event) {
+    const panel = document.getElementById("schedulePanel");
+    if (!panel) return;
+
+    panel
+      .querySelector("[data-action=export-regulation-png]")
+      ?.addEventListener("click", (clickEvent) => {
+        this.runExportButton(clickEvent.currentTarget, () =>
+          this.exportRegulationPng(event)
+        );
+      });
+
+    panel
+      .querySelector("[data-action=export-volunteer-png]")
+      ?.addEventListener("click", (clickEvent) => {
+        this.runExportButton(clickEvent.currentTarget, () =>
+          this.exportVolunteerPng(event)
+        );
+      });
+  },
+
+  async runExportButton(btn, exportFn) {
+    if (!btn || btn.disabled) return;
+
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Создаём PNG…";
+
+    try {
+      await exportFn();
+    } catch (error) {
+      alert(error.message || "Не удалось создать PNG");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  },
+
+  async exportRegulationPng(event) {
+    if (typeof SchedulePngExport === "undefined") {
+      throw new Error("Модуль экспорта расписания не загружен");
+    }
+
+    const day = this.getSelectedRegulationDay(event);
+    const items = [...(day?.items || [])].sort(
+      (a, b) => this.timeToMinutes(a.time) - this.timeToMinutes(b.time)
+    );
+
+    if (!items.length) {
+      alert("Нет пунктов регламента для экспорта на выбранный день");
+      return;
+    }
+
+    await SchedulePngExport.exportRegulation(event, day.date, items);
+  },
+
+  async exportVolunteerPng(event) {
+    if (typeof SchedulePngExport === "undefined") {
+      throw new Error("Модуль экспорта расписания не загружен");
+    }
+
+    const day = this.getSelectedVolunteerDay();
+    if (!day?.rows?.length) {
+      alert("Нет данных волонтерской смены для экспорта");
+      return;
+    }
+
+    const range = this.getDayRange(event, day.date);
+    await SchedulePngExport.exportVolunteer(event, day, range);
+  },
+
   syncRegulationsFromDom() {
-    if (!isAdmin || !this.draft) return;
+    if (!isAdmin || !this.draft || this.tab !== "regulations") return;
 
     const panel = document.getElementById("schedulePanel");
-    if (!panel?.querySelector(".regulation-item--edit")) return;
+    const section = panel?.querySelector("[data-regulation-date]");
+    if (!section) return;
 
-    const day = this.getSelectedRegulationDay(this.getEvent());
+    const dayDate =
+      section.getAttribute("data-regulation-date") || this.regulationDayDate;
+    const day = this.draft.regulationDays.find((item) => item.date === dayDate);
     if (!day) return;
 
     const items = [];
-    panel.querySelectorAll(".regulation-item--edit").forEach((row) => {
+    section.querySelectorAll(".regulation-item--edit").forEach((row) => {
       items.push(
         this.normalizeRegulation({
           id: row.getAttribute("data-reg-id"),
@@ -785,7 +957,10 @@ const EventSchedule = {
         })
       );
     });
-    day.items = items;
+
+    day.items = items.filter(
+      (item) => item.title || item.time || item.note
+    );
   },
 
   syncVolunteerFromDom() {
@@ -852,6 +1027,17 @@ const EventSchedule = {
       if (updated) {
         this.ensureRegulationDays(this.draft, updated);
         this.ensureVolunteerDays(this.draft, updated);
+        if (
+          this.regulationDayDate &&
+          !this.draft.regulationDays.some(
+            (day) => day.date === this.regulationDayDate
+          )
+        ) {
+          this.regulationDayDate = this.getDefaultRegulationDate(
+            updated,
+            this.draft.regulationDays
+          );
+        }
       }
       this.render();
       if (document.getElementById("eventsContainer")) {
