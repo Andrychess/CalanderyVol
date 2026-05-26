@@ -21,19 +21,11 @@ const EventSchedule = {
   },
 
   getPageUrl(eventId) {
-    const url = new URL("index.html", window.location.href);
-    url.searchParams.set("page", "schedule");
-    url.searchParams.set("event", eventId);
-    this.appendVkParams(url);
-    return url.pathname + url.search;
+    return `#schedule-${eventId}`;
   },
 
   getIndexUrl() {
-    const url = new URL("index.html", window.location.href);
-    url.searchParams.delete("page");
-    url.searchParams.delete("event");
-    this.appendVkParams(url);
-    return url.pathname + url.search;
+    return "#";
   },
 
   init() {

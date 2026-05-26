@@ -11,36 +11,12 @@
     <script src="config.js"></script>
     <script src="js/vk-theme.js"></script>
 </head>
-<body class="app-shell schedule-page">
+<body class="app-shell schedule-page-legacy">
     <div class="schedule-page__top">
-        <a href="index.html" class="schedule-back-btn" id="scheduleBackLink">← К мероприятиям</a>
-        <button type="button" class="toggle-btn hidden" id="adminPreviewToggleBtn" aria-pressed="false">Как пользователь</button>
+        <p class="schedule-back-btn">Загрузка расписания…</p>
     </div>
 
-    <div class="schedule-page-content">
-        <header class="schedule-page__header">
-            <h1 id="schedulePageTitle">Расписание</h1>
-            <p id="schedulePageSubtitle" class="schedule-page__subtitle"></p>
-        </header>
-
-        <div class="schedule-tabs" role="tablist" aria-label="Разделы расписания">
-            <button type="button" class="schedule-tab active" data-tab="regulations" role="tab" aria-selected="true">Регламент мероприятия</button>
-            <button type="button" class="schedule-tab" data-tab="volunteer" role="tab" aria-selected="false">Волонтерская смена</button>
-        </div>
-
-        <div id="schedulePanel" class="schedule-panel"></div>
-
-        <div id="scheduleAdminBar" class="schedule-admin-bar hidden">
-            <button type="button" class="secondary-btn" id="scheduleSaveBtn">Сохранить</button>
-            <button type="button" class="submit-btn" id="schedulePublishBtn">Опубликовать расписание</button>
-        </div>
-    </div>
-
-    <script src="js/jsonbox.js"></script>
-    <script src="js/vk-auth.js"></script>
-    <script src="js/level-colors.js"></script>
     <script src="js/event-schedule.js"></script>
-    <script src="script.js"></script>
     <script src="js/schedule-page.js"></script>
 </body>
 </html>

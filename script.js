@@ -1188,7 +1188,7 @@ async function bootstrap() {
     CalendarView.init();
     setupModal();
     await loadEvents();
-    tryOpenScheduleFromUrl();
+    tryOpenPendingSchedule();
   } catch (error) {
     console.error(error);
     const container = document.getElementById("eventsContainer");

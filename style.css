@@ -1743,6 +1743,10 @@ form textarea:focus {
   font-weight: 700;
   text-decoration: none;
   padding: 8px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .schedule-back-btn:active {
