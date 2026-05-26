@@ -583,11 +583,6 @@ function renderEventCard(event, options = {}) {
           <p class="event-location">📍 ${escapeHtml(event.location)}</p>
         </div>
         <div class="card-top-actions no-export">
-          ${
-            showScheduleBtn
-              ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
-              : ""
-          }
           <button type="button" class="favorite-btn ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
         </div>
       </div>
@@ -623,6 +618,11 @@ function renderEventCard(event, options = {}) {
 
       <div class="card-actions no-export">
         ${renderJoinButton(event)}
+        ${
+          showScheduleBtn
+            ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
+            : ""
+        }
       </div>
 
       ${
