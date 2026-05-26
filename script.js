@@ -5,6 +5,8 @@ const DEFAULT_BUTTON_LABEL =
   "Подтвердить участие (перейти в информационный чат)";
 
 let events = [];
+/** Контакт директора из VK «Контакты» сообщества */
+let groupDirectorContact = null;
 let hasAdminAccess = false;
 let adminPreviewAsUser = false;
 let isAdmin = false;
@@ -262,6 +264,30 @@ function renderJoinButton(event) {
   }
 
   return `<a class="join-btn" href="${escapeAttr(url)}" rel="noopener noreferrer">${label}</a>`;
+}
+
+function renderAskDirectorButton() {
+  const userId = groupDirectorContact?.user_id;
+  const url = VkAuth.getVkProfileUrl(userId);
+  if (!url) {
+    return "";
+  }
+
+  return `<a class="ask-director-btn" href="${escapeAttr(url)}" rel="noopener noreferrer">Задать вопрос</a>`;
+}
+
+function renderCardPrimaryActions(event) {
+  const join = renderJoinButton(event);
+  const ask = renderAskDirectorButton();
+  if (!ask) {
+    return join;
+  }
+
+  return `<div class="card-actions__row">${join}${ask}</div>`;
+}
+
+async function loadGroupDirectorContact() {
+  groupDirectorContact = await VkAuth.getDirectorContact();
 }
 
 function textToList(text) {
@@ -617,7 +643,7 @@ function renderEventCard(event, options = {}) {
       }
 
       <div class="card-actions no-export">
-        ${renderJoinButton(event)}
+        ${renderCardPrimaryActions(event)}
         ${
           showScheduleBtn
             ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
@@ -1178,6 +1204,7 @@ async function bootstrap() {
   try {
     ensureConfig();
     await VkAuth.init();
+    await loadGroupDirectorContact();
     await Favorites.load();
     await initAdminAccess();
     updateAdminUi();

@@ -672,6 +672,50 @@ body.app-shell {
   margin-top: 14px;
 }
 
+.card-actions__row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.card-actions__row .join-btn,
+.card-actions__row .ask-director-btn {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 12px 10px;
+  font-size: 0.8125rem;
+}
+
+.ask-director-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font-family: inherit;
+  text-align: center;
+  text-decoration: none;
+  -webkit-user-select: none;
+  user-select: none;
+  background: var(--surface-muted);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.35;
+  min-height: 48px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.ask-director-btn:active {
+  transform: scale(0.98);
+  background: var(--surface-hover);
+}
+
 .admin-card-actions {
   margin-top: 10px;
 }

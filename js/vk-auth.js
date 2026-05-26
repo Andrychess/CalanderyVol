@@ -222,6 +222,71 @@ const VkAuth = {
     return link.replace(/^http:\/\//i, "https://");
   },
 
+  /** Должности директора в контактах сообщества (сравнение без учёта регистра) */
+  DIRECTOR_POSITIONS: new Set([
+    "директор",
+    "директор волонтерского центра",
+    "директор центра",
+  ]),
+
+  normalizeContactPosition(desc) {
+    return String(desc || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  },
+
+  isDirectorPosition(desc) {
+    return this.DIRECTOR_POSITIONS.has(this.normalizeContactPosition(desc));
+  },
+
+  getVkProfileUrl(userId) {
+    const id = Number(userId);
+    return id > 0 ? `https://vk.com/id${id}` : "";
+  },
+
+  async getGroupContacts(accessToken, groupId) {
+    const response = await this.vkApi(
+      "groups.getById",
+      {
+        group_id: groupId,
+        fields: "contacts",
+      },
+      accessToken
+    );
+
+    const group = response?.groups?.[0];
+    return Array.isArray(group?.contacts) ? group.contacts : [];
+  },
+
+  /** Первый контакт с должностью директора из раздела «Контакты» группы */
+  async getDirectorContact() {
+    if (!this.bridge || !this.isVkEnvironment) {
+      return null;
+    }
+
+    const cfg = window.APP_CONFIG || {};
+    const appId = cfg.VK_APP_ID;
+    const groupId = this.getLaunchGroupId() || cfg.VK_GROUP_ID;
+
+    if (!appId || !groupId) {
+      return null;
+    }
+
+    try {
+      const accessToken = await this.getGroupsAccessToken(appId);
+      const contacts = await this.getGroupContacts(accessToken, groupId);
+      return (
+        contacts.find(
+          (contact) => contact?.user_id && this.isDirectorPosition(contact.desc)
+        ) || null
+      );
+    } catch (e) {
+      console.warn("Контакт директора:", e);
+      return null;
+    }
+  },
+
   async storageGet(key) {
     if (this.bridge && this.isVkEnvironment) {
       try {
