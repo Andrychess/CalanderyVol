@@ -4,6 +4,8 @@ const PNG_EXPORT_HEIGHT = 1920;
 
 const PngExport = {
   _modalUrl: null,
+  _saveBlob: null,
+  _saveFilename: "",
 
   sanitizeFilename(title) {
     const safe = String(title || "meropriyatie")
@@ -18,6 +20,63 @@ const PngExport = {
     return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
   },
 
+  isVkMiniApp() {
+    return Boolean(
+      typeof VkAuth !== "undefined" &&
+        VkAuth.isVkEnvironment &&
+        VkAuth.isVkEnvironment &&
+        VkAuth.bridge
+    );
+  },
+
+  needsMobileSaveFlow() {
+    return this.isMobileDevice() || this.isVkMiniApp();
+  },
+
+  blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Не удалось подготовить изображение"));
+      reader.readAsDataURL(blob);
+    });
+  },
+
+  async tryNativeShare(blob, filename) {
+    if (typeof navigator.share !== "function") return false;
+
+    const file = new File([blob], filename, { type: "image/png" });
+
+    try {
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+        return false;
+      }
+
+      await navigator.share({
+        files: [file],
+        title: filename.replace(/\.png$/i, ""),
+      });
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") return true;
+      return false;
+    }
+  },
+
+  async tryVkShowImage(dataUrl) {
+    if (!this.isVkMiniApp() || !dataUrl) return false;
+
+    try {
+      await VkAuth.bridge.send("VKWebAppShowImages", {
+        images: [dataUrl],
+      });
+      return true;
+    } catch (error) {
+      console.warn("VKWebAppShowImages:", error);
+      return false;
+    }
+  },
+
   ensureSaveModal() {
     let modal = document.getElementById("pngSaveModal");
     if (modal) return modal;
@@ -30,11 +89,14 @@ const PngExport = {
       <div class="modal-content png-save-modal__content">
         <button type="button" class="close png-save-modal__close" data-close aria-label="Закрыть">&times;</button>
         <h2 class="png-save-modal__title">Сохранить PNG</h2>
-        <p class="png-save-modal__hint">На телефоне: нажмите и удерживайте изображение → «Сохранить».<br>Или воспользуйтесь кнопкой «Скачать».</p>
+        <p class="png-save-modal__hint">Нажмите и удерживайте изображение ниже, затем выберите «Сохранить» или «Загрузить».</p>
         <div class="png-save-modal__preview-wrap">
           <img id="pngSavePreview" class="png-save-modal__preview" alt="PNG для сохранения">
         </div>
-        <a id="pngSaveDownloadLink" class="submit-btn png-save-modal__download" download>Скачать PNG</a>
+        <div class="png-save-modal__actions">
+          <button type="button" class="submit-btn" id="pngSaveVkBtn">Открыть в VK</button>
+          <button type="button" class="secondary-btn" id="pngSaveShareBtn">Поделиться</button>
+        </div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -49,27 +111,57 @@ const PngExport = {
       }
     });
 
+    modal.querySelector("#pngSaveShareBtn")?.addEventListener("click", async () => {
+      if (!PngExport._saveBlob) return;
+      const shared = await PngExport.tryNativeShare(
+        PngExport._saveBlob,
+        PngExport._saveFilename
+      );
+      if (!shared) {
+        alert("Поделиться не удалось. Удерживайте изображение для сохранения.");
+      }
+    });
+
+    modal.querySelector("#pngSaveVkBtn")?.addEventListener("click", async () => {
+      const img = modal.querySelector("#pngSavePreview");
+      const dataUrl = img?.src || "";
+      if (!dataUrl) return;
+      const ok = await PngExport.tryVkShowImage(dataUrl);
+      if (!ok) {
+        alert("Не удалось открыть просмотр в VK. Удерживайте изображение для сохранения.");
+      }
+    });
+
     return modal;
   },
 
-  showSaveModal(blobUrl, filename) {
+  showSaveModal(previewUrl, filename, blob) {
     const modal = this.ensureSaveModal();
     const img = modal.querySelector("#pngSavePreview");
-    const link = modal.querySelector("#pngSaveDownloadLink");
+    const vkBtn = modal.querySelector("#pngSaveVkBtn");
+    const shareBtn = modal.querySelector("#pngSaveShareBtn");
 
-    if (this._modalUrl && this._modalUrl !== blobUrl) {
+    if (this._modalUrl && this._modalUrl.startsWith("blob:")) {
       URL.revokeObjectURL(this._modalUrl);
     }
 
-    img.src = blobUrl;
-    link.href = blobUrl;
-    link.download = filename;
-    link.setAttribute("download", filename);
+    this._modalUrl = previewUrl;
+    this._saveBlob = blob;
+    this._saveFilename = filename;
+
+    if (img) {
+      img.src = previewUrl;
+    }
+
+    vkBtn?.classList.toggle("hidden", !this.isVkMiniApp());
+    shareBtn?.classList.toggle(
+      "hidden",
+      typeof navigator.share !== "function"
+    );
 
     modal.classList.add("open");
     modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    this._modalUrl = blobUrl;
   },
 
   hideSaveModal() {
@@ -89,31 +181,29 @@ const PngExport = {
     const img = modal.querySelector("#pngSavePreview");
     if (img) img.removeAttribute("src");
 
-    if (this._modalUrl) {
-      setTimeout(() => {
-        URL.revokeObjectURL(this._modalUrl);
-        this._modalUrl = null;
-      }, 300);
+    if (this._modalUrl && this._modalUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(this._modalUrl);
     }
+
+    this._modalUrl = null;
+    this._saveBlob = null;
+    this._saveFilename = "";
   },
 
   async saveBlob(blob, filename) {
-    const file = new File([blob], filename, { type: "image/png" });
+    if (this.needsMobileSaveFlow()) {
+      const dataUrl = await this.blobToDataUrl(blob);
 
-    if (typeof navigator.share === "function") {
-      try {
-        const canShareFiles =
-          !navigator.canShare || navigator.canShare({ files: [file] });
-        if (canShareFiles) {
-          await navigator.share({
-            files: [file],
-            title: filename.replace(/\.png$/i, ""),
-          });
-          return;
-        }
-      } catch (error) {
-        if (error?.name === "AbortError") return;
+      if (await this.tryVkShowImage(dataUrl)) {
+        return;
       }
+
+      if (await this.tryNativeShare(blob, filename)) {
+        return;
+      }
+
+      this.showSaveModal(dataUrl, filename, blob);
+      return;
     }
 
     const url = URL.createObjectURL(blob);
@@ -125,12 +215,6 @@ const PngExport = {
     document.body.appendChild(link);
     link.click();
     link.remove();
-
-    if (this.isMobileDevice()) {
-      this.showSaveModal(url, filename);
-      return;
-    }
-
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   },
 
@@ -139,6 +223,9 @@ const PngExport = {
       throw new Error("Библиотека html2canvas не загружена");
     }
 
+    const isMobile = this.needsMobileSaveFlow();
+    const scale = isMobile ? 0.75 : 1;
+
     frame.classList.add("png-export-story--capture");
     document.body.appendChild(frame);
 
@@ -146,18 +233,15 @@ const PngExport = {
       await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const captureHeight = Math.min(
-        4000,
-        Math.max(
-          height,
-          frame.scrollHeight || frame.offsetHeight || height
-        )
+        isMobile ? 2800 : 4000,
+        Math.max(height, frame.scrollHeight || frame.offsetHeight || height)
       );
 
       const canvas = await html2canvas(frame, {
         backgroundColor: "#ffffff",
         width,
         height: captureHeight,
-        scale: 1,
+        scale,
         logging: false,
         useCORS: true,
         allowTaint: true,

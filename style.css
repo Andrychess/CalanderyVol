@@ -1899,12 +1899,19 @@ form textarea:focus {
   display: block;
   width: 100%;
   height: auto;
+  -webkit-touch-callout: default;
+  user-select: auto;
 }
 
-.png-save-modal__download {
-  display: block;
-  text-align: center;
-  text-decoration: none;
+.png-save-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.png-save-modal__actions .submit-btn,
+.png-save-modal__actions .secondary-btn {
+  width: 100%;
 }
 
 /* ── Schedule page ── */
