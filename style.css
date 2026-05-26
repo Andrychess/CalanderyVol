@@ -1795,6 +1795,13 @@ form textarea:focus {
   color: var(--text-inverse);
 }
 
+.volunteer-edit-toggle {
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 11px 14px;
+  font-size: 0.875rem;
+}
+
 .schedule-section {
   display: flex;
   flex-direction: column;

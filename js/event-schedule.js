@@ -3,6 +3,7 @@ const EventSchedule = {
   eventId: null,
   tab: "regulations",
   draft: null,
+  volunteerEditOpen: false,
   _ready: false,
 
   VK_PARAMS: ["vk_platform", "vk_user_id", "vk_group_id", "vk_app_id", "vk_ref"],
@@ -43,7 +44,8 @@ const EventSchedule = {
 
     document.querySelectorAll(".schedule-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncDraftFromDom();
+        this.syncRegulationsFromDom();
+        this.syncVolunteerFromDom();
         this.tab = btn.dataset.tab;
         this.render();
       });
@@ -302,6 +304,13 @@ const EventSchedule = {
 
     return `
       ${this.renderDaySelector(days, day.date, editable)}
+      ${
+        editable
+          ? `<button type="button" class="toggle-btn volunteer-edit-toggle ${this.volunteerEditOpen ? "active" : ""}" data-action="toggle-volunteer-edit" type="button">
+              ${this.volunteerEditOpen ? "Скрыть редактирование" : "Редактировать смены"}
+            </button>`
+          : ""
+      }
       <div class="gantt-wrap">
         <div class="gantt" style="--gantt-cols: ${hours.length}">
           <div class="gantt__head">
@@ -311,12 +320,14 @@ const EventSchedule = {
             </div>
           </div>
           ${day.rows
-            .map((row) => this.renderGanttRow(row, range, hours.length, editable))
+            .map((row) =>
+              this.renderGanttRow(row, range, hours.length, editable, event)
+            )
             .join("")}
         </div>
       </div>
       ${
-        editable
+        editable && this.volunteerEditOpen
           ? `<button type="button" class="schedules-add-btn" data-action="add-volunteer-row">+ Участник / роль</button>`
           : ""
       }
@@ -342,7 +353,7 @@ const EventSchedule = {
     `;
   },
 
-  renderGanttRow(row, range, colCount, editable) {
+  renderGanttRow(row, range, colCount, editable, event) {
     const total = this.timeToMinutes(range.to) - this.timeToMinutes(range.from);
     const bars = row.shifts
       .map((shift) => {
@@ -359,7 +370,9 @@ const EventSchedule = {
       })
       .join("");
 
-    if (!editable) {
+    const showEdit = editable && this.volunteerEditOpen;
+
+    if (!showEdit) {
       return `
         <div class="gantt__row">
           <div class="gantt__label-col">${escapeHtml(row.label || "—")}</div>
@@ -405,12 +418,20 @@ const EventSchedule = {
     }
 
     panel.querySelector("#volunteerDaySelect")?.addEventListener("change", () => {
-      this.syncDraftFromDom();
+      this.syncRegulationsFromDom();
+      this.syncVolunteerFromDom();
+      this.render();
+    });
+
+    panel.querySelector("[data-action=toggle-volunteer-edit]")?.addEventListener("click", () => {
+      this.syncVolunteerFromDom();
+      this.volunteerEditOpen = !this.volunteerEditOpen;
       this.render();
     });
 
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
-      this.syncDraftFromDom();
+      this.syncRegulationsFromDom();
+      this.syncVolunteerFromDom();
       const first = getEventSchedules(event)[0];
       this.draft.regulations.push(
         this.normalizeRegulation({
@@ -426,7 +447,8 @@ const EventSchedule = {
       btn.addEventListener("click", () => {
         const row = btn.closest("[data-reg-id]");
         const id = row?.getAttribute("data-reg-id");
-        this.syncDraftFromDom();
+        this.syncRegulationsFromDom();
+        this.syncVolunteerFromDom();
         this.draft.regulations = this.draft.regulations.filter(
           (item) => item.id !== id
         );
@@ -435,7 +457,9 @@ const EventSchedule = {
     });
 
     panel.querySelector("[data-action=add-volunteer-row]")?.addEventListener("click", () => {
-      this.syncDraftFromDom();
+      this.syncRegulationsFromDom();
+      this.syncVolunteerFromDom();
+      this.volunteerEditOpen = true;
       const day = this.getSelectedVolunteerDay();
       if (!day) return;
       const range = this.getDayRange(event, day.date);
@@ -451,7 +475,8 @@ const EventSchedule = {
     panel.querySelectorAll("[data-action=remove-volunteer-row]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const rowId = btn.dataset.rowId;
-        this.syncDraftFromDom();
+        this.syncRegulationsFromDom();
+        this.syncVolunteerFromDom();
         const day = this.getSelectedVolunteerDay();
         if (!day) return;
         day.rows = day.rows.filter((row) => row.id !== rowId);
@@ -461,7 +486,8 @@ const EventSchedule = {
 
     panel.querySelectorAll("[data-action=add-shift]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncDraftFromDom();
+        this.syncRegulationsFromDom();
+        this.syncVolunteerFromDom();
         const day = this.getSelectedVolunteerDay();
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
@@ -475,7 +501,8 @@ const EventSchedule = {
 
     panel.querySelectorAll("[data-action=remove-shift]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncDraftFromDom();
+        this.syncRegulationsFromDom();
+        this.syncVolunteerFromDom();
         const day = this.getSelectedVolunteerDay();
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
@@ -485,11 +512,11 @@ const EventSchedule = {
     });
   },
 
-  syncDraftFromDom() {
+  syncRegulationsFromDom() {
     if (!isAdmin || !this.draft) return;
 
     const panel = document.getElementById("schedulePanel");
-    if (!panel) return;
+    if (!panel?.querySelector(".regulation-item--edit")) return;
 
     const regulations = [];
     panel.querySelectorAll(".regulation-item--edit").forEach((row) => {
@@ -504,8 +531,13 @@ const EventSchedule = {
       );
     });
     this.draft.regulations = regulations;
+  },
 
-    if (this.tab !== "volunteer") return;
+  syncVolunteerFromDom() {
+    if (!isAdmin || !this.draft) return;
+
+    const panel = document.getElementById("schedulePanel");
+    if (!panel?.querySelector(".gantt__row--edit")) return;
 
     const day = this.getSelectedVolunteerDay();
     if (!day) return;
@@ -529,6 +561,11 @@ const EventSchedule = {
       });
       target.shifts = shifts;
     });
+  },
+
+  syncDraftFromDom() {
+    this.syncRegulationsFromDom();
+    this.syncVolunteerFromDom();
   },
 
   async save(publish) {

@@ -82,7 +82,7 @@ function normalizeEvent(raw) {
     description: raw.description || "",
     buttonLabel: raw.buttonLabel || DEFAULT_BUTTON_LABEL,
     buttonUrl: raw.buttonUrl || raw.link || "",
-    plan: EventSchedule.normalizePlan(raw),
+    plan: raw?.plan ? EventSchedule.normalizePlan(raw.plan) : EventSchedule.emptyPlan(),
   };
 }
 
