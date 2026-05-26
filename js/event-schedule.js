@@ -6,6 +6,7 @@ const EventSchedule = {
   volunteerEditOpen: false,
   regulationShowPast: false,
   regulationDayDate: null,
+  volunteerDayDate: null,
   _regulationTimer: null,
   _ready: false,
 
@@ -193,6 +194,7 @@ const EventSchedule = {
     this.tab = "regulations";
     this.regulationShowPast = false;
     this.regulationDayDate = null;
+    this.volunteerDayDate = null;
     this.draft = structuredClone(event.plan || this.emptyPlan());
     this.ensureRegulationDays(this.draft, event);
     this.ensureVolunteerDays(this.draft, event);
@@ -200,22 +202,28 @@ const EventSchedule = {
       event,
       this.draft.regulationDays
     );
+    this.volunteerDayDate = this.getDefaultScheduleDayDate(
+      event,
+      this.draft.volunteerDays
+    );
     this.render();
     return true;
   },
 
   ensureRegulationDays(plan, event) {
-    const dates = getEventSchedules(event).map((item) => item.date);
+    const dates = this.getEventDates(event);
 
     if (
       Array.isArray(plan.regulations) &&
       plan.regulations.length &&
       !plan.regulationDays?.some((day) => day.items?.length)
     ) {
-      const legacyItems = plan.regulations.map((item) =>
-        this.normalizeRegulation(item)
-      );
-      plan.regulationDays = [{ date: dates[0] || "", items: legacyItems }];
+      plan.regulationDays = [
+        {
+          date: dates[0] || "",
+          items: plan.regulations.map((item) => this.normalizeRegulation(item)),
+        },
+      ];
       delete plan.regulations;
     }
 
@@ -230,44 +238,84 @@ const EventSchedule = {
       legacyOnlyDay.date = dates[0];
     }
 
+    const byDate = new Map();
+    for (const day of plan.regulationDays) {
+      if (!day?.date) continue;
+      byDate.set(day.date, this.cloneRegulationDay(day));
+    }
+
     if (!dates.length) {
-      if (!plan.regulationDays.length) {
-        plan.regulationDays = [{ date: getTodayDateString(), items: [] }];
-      }
+      const fallback =
+        byDate.values().next().value ||
+        this.cloneRegulationDay({ date: getTodayDateString(), items: [] });
+      plan.regulationDays = [fallback];
       return;
     }
 
-    const byDate = new Map(
-      plan.regulationDays
-        .filter((day) => day.date)
-        .map((day) => [day.date, day])
-    );
     plan.regulationDays = dates.map((date) => {
-      if (byDate.has(date)) {
-        const day = byDate.get(date);
-        return {
-          date,
-          items: Array.isArray(day.items) ? day.items : [],
-        };
-      }
-      return { date, items: [] };
+      const existing = byDate.get(date);
+      return existing
+        ? this.cloneRegulationDay(existing)
+        : { date, items: [] };
     });
   },
 
   ensureVolunteerDays(plan, event) {
-    const dates = getEventSchedules(event).map((item) => item.date);
+    const dates = this.getEventDates(event);
+
+    if (!Array.isArray(plan.volunteerDays)) {
+      plan.volunteerDays = [];
+    }
+
+    const byDate = new Map();
+    for (const day of plan.volunteerDays) {
+      if (!day?.date) continue;
+      byDate.set(day.date, this.cloneVolunteerDay(day));
+    }
+
     if (!dates.length) {
-      if (!plan.volunteerDays.length) {
-        plan.volunteerDays = [{ date: getTodayDateString(), rows: [] }];
-      }
+      const fallback =
+        byDate.values().next().value ||
+        this.cloneVolunteerDay({ date: getTodayDateString(), rows: [] });
+      plan.volunteerDays = [fallback];
       return;
     }
 
-    const byDate = new Map(plan.volunteerDays.map((day) => [day.date, day]));
     plan.volunteerDays = dates.map((date) => {
-      if (byDate.has(date)) return byDate.get(date);
-      return { date, rows: [] };
+      const existing = byDate.get(date);
+      return existing
+        ? this.cloneVolunteerDay(existing)
+        : { date, rows: [] };
     });
+  },
+
+  cloneRegulationDay(raw = {}) {
+    return this.normalizeRegulationDay({
+      date: raw.date || "",
+      items: Array.isArray(raw.items)
+        ? raw.items.map((item) => this.normalizeRegulation(item))
+        : [],
+    });
+  },
+
+  cloneVolunteerDay(raw = {}) {
+    return this.normalizeVolunteerDay({
+      date: raw.date || "",
+      rows: Array.isArray(raw.rows)
+        ? raw.rows.map((row) => this.normalizeVolunteerRow(row))
+        : [],
+    });
+  },
+
+  getEventDates(event) {
+    const dates = getEventSchedules(event)
+      .map((item) => item.date)
+      .filter(Boolean);
+    return [...new Set(dates)];
+  },
+
+  getDefaultScheduleDayDate(event, days) {
+    return this.getDefaultRegulationDate(event, days);
   },
 
   getDefaultRegulationDate(event, days) {
@@ -299,7 +347,7 @@ const EventSchedule = {
     return days[0];
   },
 
-  formatRegulationDayTabLabel(date, event) {
+  formatScheduleDayTabLabel(date, event) {
     if (!date) return "День";
     const shortDate = new Date(date + "T12:00:00").toLocaleDateString("ru-RU", {
       day: "numeric",
@@ -313,36 +361,40 @@ const EventSchedule = {
     return `${shortDate} · ${time}`;
   },
 
-  renderRegulationDayTabs(days, selectedDate, event) {
+  renderScheduleDayTabs(days, selectedDate, event, options = {}) {
+    const {
+      action = "select-regulation-day",
+      ariaLabel = "Дни мероприятия",
+      countField = "items",
+    } = options;
+
     if (!days.length) {
       return `<p class="schedule-day-label">Дни мероприятия не указаны</p>`;
     }
 
     const activeDate =
       selectedDate ||
-      (event
-        ? this.getDefaultRegulationDate(event, days)
-        : days[0].date);
+      (event ? this.getDefaultScheduleDayDate(event, days) : days[0].date);
 
     return `
-      <div class="regulation-day-tabs" role="tablist" aria-label="Дни регламента">
+      <div class="schedule-day-tabs" role="tablist" aria-label="${escapeAttr(ariaLabel)}">
         ${days
           .map((day) => {
             const isActive = day.date === activeDate;
-            const count = day.items?.length || 0;
+            const count = day[countField]?.length || 0;
             return `
               <button
                 type="button"
-                class="regulation-day-tab ${isActive ? "active" : ""}"
-                data-action="select-regulation-day"
+                class="schedule-day-tab ${isActive ? "active" : ""}"
+                data-action="${escapeAttr(action)}"
                 data-date="${escapeAttr(day.date)}"
                 role="tab"
                 aria-selected="${isActive ? "true" : "false"}"
               >
-                <span class="regulation-day-tab__label">${escapeHtml(this.formatRegulationDayTabLabel(day.date, event))}</span>
+                <span class="schedule-day-tab__label">${escapeHtml(this.formatScheduleDayTabLabel(day.date, event))}</span>
                 ${
                   count
-                    ? `<span class="regulation-day-tab__count">${count}</span>`
+                    ? `<span class="schedule-day-tab__count">${count}</span>`
                     : ""
                 }
               </button>
@@ -353,12 +405,37 @@ const EventSchedule = {
     `;
   },
 
-  getSelectedVolunteerDay() {
+  renderRegulationDayTabs(days, selectedDate, event) {
+    return this.renderScheduleDayTabs(days, selectedDate, event, {
+      action: "select-regulation-day",
+      ariaLabel: "Дни регламента",
+      countField: "items",
+    });
+  },
+
+  renderVolunteerDayTabs(days, selectedDate, event) {
+    return this.renderScheduleDayTabs(days, selectedDate, event, {
+      action: "select-volunteer-day",
+      ariaLabel: "Дни волонтёрской смены",
+      countField: "rows",
+    });
+  },
+
+  getSelectedVolunteerDay(event) {
     const days = this.draft?.volunteerDays || [];
     if (!days.length) return null;
-    const select = document.getElementById("volunteerDaySelect");
-    const date = select?.value || days[0].date;
-    return days.find((day) => day.date === date) || days[0];
+
+    const eventRef = event || this.getEvent();
+    const defaultDate = eventRef
+      ? this.getDefaultScheduleDayDate(eventRef, days)
+      : days[0].date;
+    const date = this.volunteerDayDate || defaultDate;
+    const day = days.find((item) => item.date === date);
+
+    if (day) return day;
+
+    this.volunteerDayDate = days[0].date;
+    return days[0];
   },
 
   render() {
@@ -600,47 +677,52 @@ const EventSchedule = {
   renderVolunteerPanel(event) {
     const editable = isAdmin;
     const days = this.draft.volunteerDays || [];
-    const day = this.getSelectedVolunteerDay() || { date: "", rows: [] };
+    const day = this.getSelectedVolunteerDay(event) || { date: "", rows: [] };
+    const dayTabs = this.renderVolunteerDayTabs(days, day.date, event);
     const range = this.getDayRange(event, day.date);
     const hours = this.buildHourMarks(range.from, range.to);
 
     if (!day.rows.length && !editable) {
       return `
-        ${this.renderDaySelector(days, day.date, editable, "volunteerDaySelect")}
-        <p class="schedule-empty">Волонтерская смена пока не составлена.</p>
+        <section class="schedule-section" data-volunteer-date="${escapeAttr(day.date)}">
+          ${dayTabs}
+          <p class="schedule-empty">Волонтерская смена на этот день пока не составлена.</p>
+        </section>
       `;
     }
 
     return `
-      ${this.renderDaySelector(days, day.date, editable, "volunteerDaySelect")}
-      ${
-        editable
-          ? `<button type="button" class="toggle-btn volunteer-edit-toggle ${this.volunteerEditOpen ? "active" : ""}" data-action="toggle-volunteer-edit" type="button">
-              ${this.volunteerEditOpen ? "Скрыть редактирование" : "Редактировать смены"}
-            </button>`
-          : ""
-      }
-      <div class="gantt-wrap">
-        <div class="gantt" style="--gantt-cols: ${hours.length}">
-          <div class="gantt__head">
-            <div class="gantt__label-col">Участник</div>
-            <div class="gantt__scale">
-              ${hours.map((h) => `<span>${escapeHtml(h)}</span>`).join("")}
+      <section class="schedule-section" data-volunteer-date="${escapeAttr(day.date)}">
+        ${dayTabs}
+        ${
+          editable
+            ? `<button type="button" class="toggle-btn volunteer-edit-toggle ${this.volunteerEditOpen ? "active" : ""}" data-action="toggle-volunteer-edit" type="button">
+                ${this.volunteerEditOpen ? "Скрыть редактирование" : "Редактировать смены"}
+              </button>`
+            : ""
+        }
+        <div class="gantt-wrap">
+          <div class="gantt" style="--gantt-cols: ${hours.length}">
+            <div class="gantt__head">
+              <div class="gantt__label-col">Участник</div>
+              <div class="gantt__scale">
+                ${hours.map((h) => `<span>${escapeHtml(h)}</span>`).join("")}
+              </div>
             </div>
+            ${day.rows
+              .map((row) =>
+                this.renderGanttRow(row, range, hours.length, editable, event)
+              )
+              .join("")}
           </div>
-          ${day.rows
-            .map((row) =>
-              this.renderGanttRow(row, range, hours.length, editable, event)
-            )
-            .join("")}
         </div>
-      </div>
-      ${
-        editable && this.volunteerEditOpen
-          ? `<button type="button" class="schedules-add-btn" data-action="add-volunteer-row">+ Участник / роль</button>`
-          : ""
-      }
-      ${day.rows.length ? this.renderScheduleExportBtn("export-volunteer-png", "Скачать смену PNG") : ""}
+        ${
+          editable && this.volunteerEditOpen
+            ? `<button type="button" class="schedules-add-btn" data-action="add-volunteer-row">+ Участник / роль на ${escapeHtml(formatDate(day.date) || "этот день")}</button>`
+            : ""
+        }
+        ${day.rows.length ? this.renderScheduleExportBtn("export-volunteer-png", "Скачать смену PNG") : ""}
+      </section>
     `;
   },
 
@@ -649,25 +731,6 @@ const EventSchedule = {
       <div class="schedule-export-bar">
         <button type="button" class="secondary-btn schedule-export-btn" data-action="${escapeAttr(action)}">${escapeHtml(label)}</button>
       </div>
-    `;
-  },
-
-  renderDaySelector(days, selectedDate, editable, selectId = "volunteerDaySelect") {
-    if (days.length <= 1) {
-      const label = selectedDate ? formatDate(selectedDate) : "День не выбран";
-      return `<p class="schedule-day-label">${escapeHtml(label)}</p>`;
-    }
-
-    return `
-      <label class="field-label">День мероприятия</label>
-      <select id="${escapeAttr(selectId)}" class="schedule-day-select" ${editable ? "" : "disabled"}>
-        ${days
-          .map(
-            (day) =>
-              `<option value="${escapeAttr(day.date)}" ${day.date === selectedDate ? "selected" : ""}>${escapeHtml(formatDate(day.date))}</option>`
-          )
-          .join("")}
-      </select>
     `;
   },
 
@@ -737,13 +800,27 @@ const EventSchedule = {
         const nextDate = btn.dataset.date;
         if (nextDate === this.regulationDayDate) return;
 
-        if (isAdmin) {
+        if (isAdmin && this.tab === "regulations") {
           this.syncRegulationsFromDom();
-          this.syncVolunteerFromDom();
         }
 
         this.regulationDayDate = nextDate;
         this.regulationShowPast = false;
+        this.render();
+      });
+    });
+
+    panel.querySelectorAll("[data-action=select-volunteer-day]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const nextDate = btn.dataset.date;
+        if (nextDate === this.volunteerDayDate) return;
+
+        if (isAdmin && this.tab === "volunteer") {
+          this.syncVolunteerFromDom();
+        }
+
+        this.volunteerDayDate = nextDate;
+        this.volunteerEditOpen = false;
         this.render();
       });
     });
@@ -756,17 +833,8 @@ const EventSchedule = {
       });
 
     if (!isAdmin) {
-      panel.querySelector("#volunteerDaySelect")?.addEventListener("change", () => {
-        this.render();
-      });
       return;
     }
-
-    panel.querySelector("#volunteerDaySelect")?.addEventListener("change", () => {
-      this.syncRegulationsFromDom();
-      this.syncVolunteerFromDom();
-      this.render();
-    });
 
     panel.querySelector("[data-action=toggle-volunteer-edit]")?.addEventListener("click", () => {
       this.syncVolunteerFromDom();
@@ -776,7 +844,6 @@ const EventSchedule = {
 
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
       this.syncRegulationsFromDom();
-      this.syncVolunteerFromDom();
       const day = this.getSelectedRegulationDay(event);
       if (!day) return;
       const eventDay =
@@ -798,7 +865,6 @@ const EventSchedule = {
         const row = btn.closest("[data-reg-id]");
         const id = row?.getAttribute("data-reg-id");
         this.syncRegulationsFromDom();
-        this.syncVolunteerFromDom();
         const day = this.getSelectedRegulationDay(event);
         if (!day) return;
         day.items = day.items.filter((item) => item.id !== id);
@@ -807,10 +873,9 @@ const EventSchedule = {
     });
 
     panel.querySelector("[data-action=add-volunteer-row]")?.addEventListener("click", () => {
-      this.syncRegulationsFromDom();
       this.syncVolunteerFromDom();
       this.volunteerEditOpen = true;
-      const day = this.getSelectedVolunteerDay();
+      const day = this.getSelectedVolunteerDay(event);
       if (!day) return;
       const range = this.getDayRange(event, day.date);
       day.rows.push(
@@ -825,9 +890,8 @@ const EventSchedule = {
     panel.querySelectorAll("[data-action=remove-volunteer-row]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const rowId = btn.dataset.rowId;
-        this.syncRegulationsFromDom();
         this.syncVolunteerFromDom();
-        const day = this.getSelectedVolunteerDay();
+        const day = this.getSelectedVolunteerDay(event);
         if (!day) return;
         day.rows = day.rows.filter((row) => row.id !== rowId);
         this.render();
@@ -836,9 +900,8 @@ const EventSchedule = {
 
     panel.querySelectorAll("[data-action=add-shift]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncRegulationsFromDom();
         this.syncVolunteerFromDom();
-        const day = this.getSelectedVolunteerDay();
+        const day = this.getSelectedVolunteerDay(event);
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
         const range = this.getDayRange(event, day.date);
@@ -851,9 +914,8 @@ const EventSchedule = {
 
     panel.querySelectorAll("[data-action=remove-shift]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        this.syncRegulationsFromDom();
         this.syncVolunteerFromDom();
-        const day = this.getSelectedVolunteerDay();
+        const day = this.getSelectedVolunteerDay(event);
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
         row.shifts = row.shifts.filter((shift) => shift.id !== btn.dataset.shiftId);
@@ -923,7 +985,7 @@ const EventSchedule = {
       throw new Error("Модуль экспорта расписания не загружен");
     }
 
-    const day = this.getSelectedVolunteerDay();
+    const day = this.getSelectedVolunteerDay(event);
     if (!day?.rows?.length) {
       alert("Нет данных волонтерской смены для экспорта");
       return;
@@ -941,7 +1003,8 @@ const EventSchedule = {
     if (!section) return;
 
     const dayDate =
-      section.getAttribute("data-regulation-date") || this.regulationDayDate;
+      this.regulationDayDate ||
+      section.getAttribute("data-regulation-date");
     const day = this.draft.regulationDays.find((item) => item.date === dayDate);
     if (!day) return;
 
@@ -964,15 +1027,18 @@ const EventSchedule = {
   },
 
   syncVolunteerFromDom() {
-    if (!isAdmin || !this.draft) return;
+    if (!isAdmin || !this.draft || this.tab !== "volunteer") return;
 
     const panel = document.getElementById("schedulePanel");
-    if (!panel?.querySelector(".gantt__row--edit")) return;
+    const section = panel?.querySelector("[data-volunteer-date]");
+    if (!section?.querySelector(".gantt__row--edit")) return;
 
-    const day = this.getSelectedVolunteerDay();
+    const dayDate =
+      this.volunteerDayDate || section.getAttribute("data-volunteer-date");
+    const day = this.draft.volunteerDays.find((item) => item.date === dayDate);
     if (!day) return;
 
-    panel.querySelectorAll(".gantt__row--edit").forEach((rowEl) => {
+    section.querySelectorAll(".gantt__row--edit").forEach((rowEl) => {
       const rowId = rowEl.getAttribute("data-row-id");
       const target = day.rows.find((item) => item.id === rowId);
       if (!target) return;
@@ -1002,6 +1068,11 @@ const EventSchedule = {
     if (!isAdmin || !this.eventId || !this.draft) return;
 
     this.syncDraftFromDom();
+    const eventRef = this.getEvent();
+    if (eventRef) {
+      this.ensureRegulationDays(this.draft, eventRef);
+      this.ensureVolunteerDays(this.draft, eventRef);
+    }
     this.draft = this.normalizePlan(this.draft);
 
     if (publish) {
@@ -1036,6 +1107,17 @@ const EventSchedule = {
           this.regulationDayDate = this.getDefaultRegulationDate(
             updated,
             this.draft.regulationDays
+          );
+        }
+        if (
+          this.volunteerDayDate &&
+          !this.draft.volunteerDays.some(
+            (day) => day.date === this.volunteerDayDate
+          )
+        ) {
+          this.volunteerDayDate = this.getDefaultScheduleDayDate(
+            updated,
+            this.draft.volunteerDays
           );
         }
       }

@@ -2041,6 +2041,7 @@ form textarea:focus {
   font-family: inherit;
 }
 
+.schedule-day-tabs,
 .regulation-day-tabs {
   display: flex;
   gap: 8px;
@@ -2051,6 +2052,7 @@ form textarea:focus {
   scrollbar-width: thin;
 }
 
+.schedule-day-tab,
 .regulation-day-tab {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2069,16 +2071,19 @@ form textarea:focus {
   white-space: nowrap;
 }
 
+.schedule-day-tab.active,
 .regulation-day-tab.active {
   background: var(--primary);
   border-color: var(--primary);
   color: var(--text-inverse);
 }
 
+.schedule-day-tab__label,
 .regulation-day-tab__label {
   display: inline-block;
 }
 
+.schedule-day-tab__count,
 .regulation-day-tab__count {
   display: inline-flex;
   align-items: center;
@@ -2092,6 +2097,7 @@ form textarea:focus {
   font-weight: 800;
 }
 
+.schedule-day-tab:not(.active) .schedule-day-tab__count,
 .regulation-day-tab:not(.active) .regulation-day-tab__count {
   background: var(--primary-soft);
   color: var(--primary);
