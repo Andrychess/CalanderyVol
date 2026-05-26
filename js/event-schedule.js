@@ -4,6 +4,8 @@ const EventSchedule = {
   tab: "regulations",
   draft: null,
   volunteerEditOpen: false,
+  regulationShowPast: false,
+  _regulationTimer: null,
   _ready: false,
 
   VK_PARAMS: ["vk_platform", "vk_user_id", "vk_group_id", "vk_app_id", "vk_ref"],
@@ -19,7 +21,8 @@ const EventSchedule = {
   },
 
   getPageUrl(eventId) {
-    const url = new URL("schedule.html", window.location.href);
+    const url = new URL("index.html", window.location.href);
+    url.searchParams.set("page", "schedule");
     url.searchParams.set("event", eventId);
     this.appendVkParams(url);
     return url.pathname + url.search;
@@ -27,6 +30,8 @@ const EventSchedule = {
 
   getIndexUrl() {
     const url = new URL("index.html", window.location.href);
+    url.searchParams.delete("page");
+    url.searchParams.delete("event");
     this.appendVkParams(url);
     return url.pathname + url.search;
   },
@@ -55,7 +60,7 @@ const EventSchedule = {
   emptyPlan() {
     return {
       published: false,
-      regulations: [],
+      regulationDays: [],
       volunteerDays: [],
     };
   },
@@ -64,25 +69,48 @@ const EventSchedule = {
     const plan =
       input?.plan && typeof input.plan === "object"
         ? input.plan
-        : input?.regulations !== undefined ||
+        : input?.regulationDays !== undefined ||
+            input?.regulations !== undefined ||
             input?.volunteerDays !== undefined ||
             input?.published !== undefined
           ? input
           : this.emptyPlan();
 
-    const regulations = Array.isArray(plan.regulations)
-      ? plan.regulations.map((item) => this.normalizeRegulation(item))
+    let regulationDays = Array.isArray(plan.regulationDays)
+      ? plan.regulationDays.map((day) => this.normalizeRegulationDay(day))
       : [];
+
+    const legacyRegulations = Array.isArray(plan.regulations)
+      ? plan.regulations
+          .map((item) => this.normalizeRegulation(item))
+          .filter((item) => item.title || item.time || item.note)
+      : [];
+
+    if (
+      legacyRegulations.length &&
+      !regulationDays.some((day) => day.items.length)
+    ) {
+      regulationDays = [{ date: "", items: legacyRegulations }];
+    }
+
     const volunteerDays = Array.isArray(plan.volunteerDays)
       ? plan.volunteerDays.map((day) => this.normalizeVolunteerDay(day))
       : [];
 
     return {
       published: Boolean(plan.published),
-      regulations: regulations.filter(
-        (item) => item.title || item.time || item.note
-      ),
+      regulationDays: regulationDays.filter((day) => day.date || day.items.length),
       volunteerDays: volunteerDays.filter((day) => day.date),
+    };
+  },
+
+  normalizeRegulationDay(raw = {}) {
+    const items = Array.isArray(raw.items)
+      ? raw.items.map((item) => this.normalizeRegulation(item))
+      : [];
+    return {
+      date: raw.date || "",
+      items: items.filter((item) => item.title || item.time || item.note),
     };
   },
 
@@ -128,7 +156,16 @@ const EventSchedule = {
 
   hasContent(plan) {
     if (!plan) return false;
-    if (plan.regulations?.some((item) => item.title || item.time || item.note)) {
+    if (
+      plan.regulationDays?.some((day) =>
+        day.items?.some((item) => item.title || item.time || item.note)
+      )
+    ) {
+      return true;
+    }
+    if (
+      plan.regulations?.some((item) => item.title || item.time || item.note)
+    ) {
       return true;
     }
     return plan.volunteerDays?.some((day) =>
@@ -157,10 +194,62 @@ const EventSchedule = {
 
     this.eventId = eventId;
     this.tab = "regulations";
+    this.regulationShowPast = false;
     this.draft = structuredClone(event.plan || this.emptyPlan());
+    this.ensureRegulationDays(this.draft, event);
     this.ensureVolunteerDays(this.draft, event);
     this.render();
     return true;
+  },
+
+  ensureRegulationDays(plan, event) {
+    const dates = getEventSchedules(event).map((item) => item.date);
+
+    if (
+      Array.isArray(plan.regulations) &&
+      plan.regulations.length &&
+      !plan.regulationDays?.some((day) => day.items?.length)
+    ) {
+      const legacyItems = plan.regulations.map((item) =>
+        this.normalizeRegulation(item)
+      );
+      plan.regulationDays = [{ date: dates[0] || "", items: legacyItems }];
+      delete plan.regulations;
+    }
+
+    if (!Array.isArray(plan.regulationDays)) {
+      plan.regulationDays = [];
+    }
+
+    const legacyOnlyDay = plan.regulationDays.find(
+      (day) => !day.date && day.items?.length
+    );
+    if (legacyOnlyDay && dates[0]) {
+      legacyOnlyDay.date = dates[0];
+    }
+
+    if (!dates.length) {
+      if (!plan.regulationDays.length) {
+        plan.regulationDays = [{ date: getTodayDateString(), items: [] }];
+      }
+      return;
+    }
+
+    const byDate = new Map(
+      plan.regulationDays
+        .filter((day) => day.date)
+        .map((day) => [day.date, day])
+    );
+    plan.regulationDays = dates.map((date) => {
+      if (byDate.has(date)) {
+        const day = byDate.get(date);
+        return {
+          date,
+          items: Array.isArray(day.items) ? day.items : [],
+        };
+      }
+      return { date, items: [] };
+    });
   },
 
   ensureVolunteerDays(plan, event) {
@@ -177,6 +266,29 @@ const EventSchedule = {
       if (byDate.has(date)) return byDate.get(date);
       return { date, rows: [] };
     });
+  },
+
+  getDefaultRegulationDate(event, days) {
+    const today = getTodayDateString();
+    const dates = days.map((day) => day.date).filter(Boolean);
+    if (!dates.length) return today;
+    if (dates.includes(today)) return today;
+
+    const upcoming = dates.find((date) => date > today);
+    if (upcoming) return upcoming;
+
+    return dates[dates.length - 1];
+  },
+
+  getSelectedRegulationDay(event) {
+    const days = this.draft?.regulationDays || [];
+    if (!days.length) return null;
+    const select = document.getElementById("regulationDaySelect");
+    const defaultDate = event
+      ? this.getDefaultRegulationDate(event, days)
+      : days[0].date;
+    const date = select?.value || defaultDate;
+    return days.find((day) => day.date === date) || days[0];
   },
 
   getSelectedVolunteerDay() {
@@ -220,49 +332,173 @@ const EventSchedule = {
         : this.renderVolunteerPanel(event);
 
     this.bindPanelActions(event);
+    this.scheduleRegulationRefresh();
+  },
+
+  scheduleRegulationRefresh() {
+    if (this._regulationTimer) {
+      clearInterval(this._regulationTimer);
+      this._regulationTimer = null;
+    }
+
+    if (this.tab !== "regulations" || isAdmin) return;
+
+    this._regulationTimer = setInterval(() => {
+      if (this.tab === "regulations" && !isAdmin && this.eventId) {
+        this.render();
+      }
+    }, 60000);
+  },
+
+  getRegulationTimelineStatus(item, index, items, dayDate, event) {
+    const today = getTodayDateString();
+    if (!dayDate) return "upcoming";
+    if (dayDate < today) return "past";
+    if (dayDate > today) return "upcoming";
+
+    if (!item.time && !item.timeEnd) return "neutral";
+
+    const nowMinutes = this.timeToMinutes(
+      `${String(new Date().getHours()).padStart(2, "0")}:${String(
+        new Date().getMinutes()
+      ).padStart(2, "0")}`
+    );
+    const start = item.time ? this.timeToMinutes(item.time) : null;
+    let end = item.timeEnd ? this.timeToMinutes(item.timeEnd) : null;
+
+    if (start !== null && end === null) {
+      const next = items[index + 1];
+      if (next?.time) {
+        end = this.timeToMinutes(next.time);
+      } else {
+        end = this.timeToMinutes(this.getDayRange(event, dayDate).to);
+      }
+    }
+
+    if (start === null) {
+      return end !== null && nowMinutes >= end ? "past" : "upcoming";
+    }
+
+    if (nowMinutes >= (end ?? start)) return "past";
+    if (nowMinutes >= start) return "current";
+    return "upcoming";
   },
 
   renderRegulationsPanel(event) {
     const editable = isAdmin;
-    const items = [...(this.draft.regulations || [])].sort(
+    const days = this.draft.regulationDays || [];
+    const day = this.getSelectedRegulationDay(event) || {
+      date: "",
+      items: [],
+    };
+    const sortedItems = [...(day.items || [])].sort(
       (a, b) => this.timeToMinutes(a.time) - this.timeToMinutes(b.time)
     );
 
-    if (!items.length && !editable) {
-      return `<p class="schedule-empty">Регламент пока не добавлен.</p>`;
+    const pastCount = editable
+      ? 0
+      : sortedItems.filter(
+          (item, index) =>
+            this.getRegulationTimelineStatus(
+              item,
+              index,
+              sortedItems,
+              day.date,
+              event
+            ) === "past"
+        ).length;
+
+    const visibleItems = editable
+      ? sortedItems
+      : sortedItems.filter((item, index) => {
+          const status = this.getRegulationTimelineStatus(
+            item,
+            index,
+            sortedItems,
+            day.date,
+            event
+          );
+          return status !== "past" || this.regulationShowPast;
+        });
+
+    const totalItems = sortedItems.length;
+    const dayHasContent = totalItems > 0;
+
+    if (!dayHasContent && !editable) {
+      return `
+        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
+        <p class="schedule-empty">Регламент на этот день пока не добавлен.</p>
+      `;
+    }
+
+    if (!visibleItems.length && !editable && pastCount > 0) {
+      return `
+        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
+        <p class="schedule-empty">На выбранный день все пункты регламента уже прошли.</p>
+        <button type="button" class="toggle-btn regulation-past-toggle" data-action="toggle-regulation-past">
+          Показать прошедшие (${pastCount})
+        </button>
+      `;
     }
 
     return `
       <section class="schedule-section">
+        ${this.renderDaySelector(days, day.date, editable, "regulationDaySelect")}
         ${
           editable
             ? `<button type="button" class="schedules-add-btn" data-action="add-regulation">+ Пункт регламента</button>`
-            : ""
+            : pastCount > 0
+              ? `<button type="button" class="toggle-btn regulation-past-toggle ${this.regulationShowPast ? "active" : ""}" data-action="toggle-regulation-past">
+                  ${this.regulationShowPast ? "Скрыть прошедшие" : `Показать прошедшие (${pastCount})`}
+                </button>`
+              : ""
         }
         <ol class="regulation-list">
-          ${items
-            .map((item) => this.renderRegulationItem(item, editable))
+          ${visibleItems
+            .map((item) => {
+              const index = sortedItems.findIndex(
+                (entry) => entry.id === item.id
+              );
+              const status = editable
+                ? ""
+                : this.getRegulationTimelineStatus(
+                    item,
+                    index,
+                    sortedItems,
+                    day.date,
+                    event
+                  );
+              return this.renderRegulationItem(item, editable, status);
+            })
             .join("")}
         </ol>
         ${
-          !items.length && editable
-            ? `<p class="schedule-hint">Пункты регламента необязательны. Можно указать только время, только название или оба поля.</p>`
+          !dayHasContent && editable
+            ? `<p class="schedule-hint">Пункты регламента необязательны и задаются отдельно для каждого дня мероприятия.</p>`
             : ""
         }
       </section>
     `;
   },
 
-  renderRegulationItem(item, editable) {
+  renderRegulationItem(item, editable, status = "") {
     const timeLabel = item.timeEnd
       ? `${item.time}–${item.timeEnd}`
       : item.time || "—";
 
     if (!editable) {
+      const statusClass =
+        status === "current" ? " regulation-item--current" : "";
+      const statusBadge =
+        status === "current"
+          ? `<span class="regulation-item__badge">Сейчас</span>`
+          : "";
+
       return `
-        <li class="regulation-item">
+        <li class="regulation-item${statusClass}">
           <span class="regulation-item__time">${escapeHtml(timeLabel)}</span>
           <div class="regulation-item__body">
+            ${statusBadge}
             <strong>${escapeHtml(item.title || "Без названия")}</strong>
             ${
               item.note
@@ -297,13 +533,13 @@ const EventSchedule = {
 
     if (!day.rows.length && !editable) {
       return `
-        ${this.renderDaySelector(days, day.date, editable)}
+        ${this.renderDaySelector(days, day.date, editable, "volunteerDaySelect")}
         <p class="schedule-empty">Волонтерская смена пока не составлена.</p>
       `;
     }
 
     return `
-      ${this.renderDaySelector(days, day.date, editable)}
+      ${this.renderDaySelector(days, day.date, editable, "volunteerDaySelect")}
       ${
         editable
           ? `<button type="button" class="toggle-btn volunteer-edit-toggle ${this.volunteerEditOpen ? "active" : ""}" data-action="toggle-volunteer-edit" type="button">
@@ -334,7 +570,7 @@ const EventSchedule = {
     `;
   },
 
-  renderDaySelector(days, selectedDate, editable) {
+  renderDaySelector(days, selectedDate, editable, selectId = "volunteerDaySelect") {
     if (days.length <= 1) {
       const label = selectedDate ? formatDate(selectedDate) : "День не выбран";
       return `<p class="schedule-day-label">${escapeHtml(label)}</p>`;
@@ -342,7 +578,7 @@ const EventSchedule = {
 
     return `
       <label class="field-label">День мероприятия</label>
-      <select id="volunteerDaySelect" class="schedule-day-select" ${editable ? "" : "disabled"}>
+      <select id="${escapeAttr(selectId)}" class="schedule-day-select" ${editable ? "" : "disabled"}>
         ${days
           .map(
             (day) =>
@@ -410,8 +646,27 @@ const EventSchedule = {
 
   bindPanelActions(event) {
     const panel = document.getElementById("schedulePanel");
-    if (!panel || !isAdmin) {
-      panel?.querySelector("#volunteerDaySelect")?.addEventListener("change", () => {
+    if (!panel) return;
+
+    panel
+      .querySelector("#regulationDaySelect")
+      ?.addEventListener("change", () => {
+        if (isAdmin) {
+          this.syncRegulationsFromDom();
+          this.syncVolunteerFromDom();
+        }
+        this.render();
+      });
+
+    panel
+      .querySelector("[data-action=toggle-regulation-past]")
+      ?.addEventListener("click", () => {
+        this.regulationShowPast = !this.regulationShowPast;
+        this.render();
+      });
+
+    if (!isAdmin) {
+      panel.querySelector("#volunteerDaySelect")?.addEventListener("change", () => {
         this.render();
       });
       return;
@@ -432,11 +687,16 @@ const EventSchedule = {
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
       this.syncRegulationsFromDom();
       this.syncVolunteerFromDom();
-      const first = getEventSchedules(event)[0];
-      this.draft.regulations.push(
+      const day = this.getSelectedRegulationDay(event);
+      if (!day) return;
+      const eventDay =
+        getEventSchedules(event).find((item) => item.date === day.date) ||
+        getEventSchedules(event)[0];
+      const range = this.getDayRange(event, day.date);
+      day.items.push(
         this.normalizeRegulation({
-          time: first?.time || "",
-          timeEnd: first?.timeEnd || "",
+          time: eventDay?.time || range.from,
+          timeEnd: eventDay?.timeEnd || "",
           title: "",
         })
       );
@@ -449,9 +709,9 @@ const EventSchedule = {
         const id = row?.getAttribute("data-reg-id");
         this.syncRegulationsFromDom();
         this.syncVolunteerFromDom();
-        this.draft.regulations = this.draft.regulations.filter(
-          (item) => item.id !== id
-        );
+        const day = this.getSelectedRegulationDay(event);
+        if (!day) return;
+        day.items = day.items.filter((item) => item.id !== id);
         this.render();
       });
     });
@@ -518,9 +778,12 @@ const EventSchedule = {
     const panel = document.getElementById("schedulePanel");
     if (!panel?.querySelector(".regulation-item--edit")) return;
 
-    const regulations = [];
+    const day = this.getSelectedRegulationDay(this.getEvent());
+    if (!day) return;
+
+    const items = [];
     panel.querySelectorAll(".regulation-item--edit").forEach((row) => {
-      regulations.push(
+      items.push(
         this.normalizeRegulation({
           id: row.getAttribute("data-reg-id"),
           time: row.querySelector(".regulation-time")?.value,
@@ -530,7 +793,7 @@ const EventSchedule = {
         })
       );
     });
-    this.draft.regulations = regulations;
+    day.items = items;
   },
 
   syncVolunteerFromDom() {
@@ -594,6 +857,10 @@ const EventSchedule = {
       await reloadEventsFromStorage();
       const updated = this.getEvent();
       this.draft = structuredClone(updated?.plan || this.emptyPlan());
+      if (updated) {
+        this.ensureRegulationDays(this.draft, updated);
+        this.ensureVolunteerDays(this.draft, updated);
+      }
       this.render();
       if (document.getElementById("eventsContainer")) {
         renderCurrentView();

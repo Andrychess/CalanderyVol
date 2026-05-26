@@ -432,6 +432,8 @@ body.app-shell {
   cursor: pointer;
   font-family: inherit;
   transition: background var(--transition);
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .schedule-card-btn:active {
@@ -1716,6 +1718,10 @@ form textarea:focus {
 }
 
 /* ── Schedule page ── */
+.schedule-page-view {
+  display: block;
+}
+
 .schedule-page__top {
   display: flex;
   align-items: center;
@@ -1857,6 +1863,30 @@ form textarea:focus {
   border-radius: var(--radius-md);
   background: var(--surface-muted);
   border: 1px solid var(--border);
+}
+
+.regulation-item--current {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(38, 105, 184, 0.12);
+}
+
+.regulation-item__badge {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: var(--text-inverse);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.regulation-past-toggle {
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .regulation-item__time {

@@ -12,6 +12,7 @@
     <script src="js/vk-theme.js"></script>
 </head>
 <body class="app-shell">
+    <div id="mainView">
     <div class="app-header">
         <h1>Мероприятия</h1>
         <p class="subtitle" id="appSubtitle">Загрузка...</p>
@@ -56,6 +57,33 @@
     <div id="calendarView" class="calendar-view hidden" aria-hidden="true">
         <div id="calendarContainer">
             <div class="loading">Загрузка календаря...</div>
+        </div>
+    </div>
+    </div>
+
+    <div id="scheduleView" class="hidden schedule-page-view">
+        <div class="schedule-page__top">
+            <a href="index.html" class="schedule-back-btn" id="scheduleBackLink">← К мероприятиям</a>
+            <button type="button" class="toggle-btn hidden" id="scheduleAdminPreviewToggleBtn" aria-pressed="false">Как пользователь</button>
+        </div>
+
+        <div class="schedule-page-content">
+            <header class="schedule-page__header">
+                <h1 id="schedulePageTitle">Расписание</h1>
+                <p id="schedulePageSubtitle" class="schedule-page__subtitle"></p>
+            </header>
+
+            <div class="schedule-tabs" role="tablist" aria-label="Разделы расписания">
+                <button type="button" class="schedule-tab active" data-tab="regulations" role="tab" aria-selected="true">Регламент мероприятия</button>
+                <button type="button" class="schedule-tab" data-tab="volunteer" role="tab" aria-selected="false">Волонтерская смена</button>
+            </div>
+
+            <div id="schedulePanel" class="schedule-panel"></div>
+
+            <div id="scheduleAdminBar" class="schedule-admin-bar hidden">
+                <button type="button" class="secondary-btn" id="scheduleSaveBtn">Сохранить</button>
+                <button type="button" class="submit-btn" id="schedulePublishBtn">Опубликовать расписание</button>
+            </div>
         </div>
     </div>
 
@@ -127,6 +155,7 @@
     <script src="js/level-colors.js"></script>
     <script src="js/calendar-view.js"></script>
     <script src="js/event-schedule.js"></script>
+    <script src="js/schedule-page.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

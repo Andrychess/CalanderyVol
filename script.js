@@ -585,7 +585,7 @@ function renderEventCard(event, options = {}) {
         <div class="card-top-actions no-export">
           ${
             showScheduleBtn
-              ? `<a class="schedule-card-btn" href="${escapeAttr(EventSchedule.getPageUrl(event.id))}">${escapeHtml(scheduleBtnLabel)}</a>`
+              ? `<button type="button" class="schedule-card-btn" data-action="open-schedule" data-id="${escapeHtml(event.id)}">${escapeHtml(scheduleBtnLabel)}</button>`
               : ""
           }
           <button type="button" class="favorite-btn ${isFavorite ? "active" : ""}" data-action="favorite" data-id="${escapeHtml(event.id)}" aria-label="В избранное">${isFavorite ? "★" : "☆"}</button>
@@ -693,6 +693,12 @@ function bindEventCardActions(container) {
     btn.addEventListener("click", async () => {
       await Favorites.toggle(btn.dataset.id);
       renderCurrentView();
+    });
+  });
+
+  container.querySelectorAll("[data-action=open-schedule]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openSchedulePage(btn.dataset.id);
     });
   });
 
@@ -1008,20 +1014,21 @@ async function initAdminAccess() {
 }
 
 function updateAdminPreviewToggle() {
-  const btn = document.getElementById("adminPreviewToggleBtn");
-  if (!btn) return;
+  document
+    .querySelectorAll("#adminPreviewToggleBtn, #scheduleAdminPreviewToggleBtn")
+    .forEach((btn) => {
+      btn.classList.toggle("hidden", !hasAdminAccess);
+      if (!hasAdminAccess) return;
 
-  btn.classList.toggle("hidden", !hasAdminAccess);
-  if (!hasAdminAccess) return;
-
-  btn.textContent = adminPreviewAsUser
-    ? "Режим администратора"
-    : "Как пользователь";
-  btn.classList.toggle("active", adminPreviewAsUser);
-  btn.setAttribute("aria-pressed", adminPreviewAsUser ? "true" : "false");
-  btn.title = adminPreviewAsUser
-    ? "Вернуться к инструментам управления"
-    : "Посмотреть приложение глазами участника";
+      btn.textContent = adminPreviewAsUser
+        ? "Режим администратора"
+        : "Как пользователь";
+      btn.classList.toggle("active", adminPreviewAsUser);
+      btn.setAttribute("aria-pressed", adminPreviewAsUser ? "true" : "false");
+      btn.title = adminPreviewAsUser
+        ? "Вернуться к инструментам управления"
+        : "Посмотреть приложение глазами участника";
+    });
 }
 
 function toggleAdminPreviewMode() {
@@ -1041,7 +1048,7 @@ function toggleAdminPreviewMode() {
 }
 
 function refreshSchedulePageAccess() {
-  if (!document.body.classList.contains("schedule-page")) return;
+  if (!isScheduleViewActive()) return;
   if (typeof EventSchedule === "undefined" || !EventSchedule.eventId) return;
 
   const event = EventSchedule.getEvent();
@@ -1062,11 +1069,13 @@ function refreshSchedulePageAccess() {
 }
 
 function setupAdminPreviewToggle() {
-  const btn = document.getElementById("adminPreviewToggleBtn");
-  if (!btn || btn.dataset.bound === "1") return;
-
-  btn.dataset.bound = "1";
-  btn.addEventListener("click", toggleAdminPreviewMode);
+  document
+    .querySelectorAll("#adminPreviewToggleBtn, #scheduleAdminPreviewToggleBtn")
+    .forEach((btn) => {
+      if (btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", toggleAdminPreviewMode);
+    });
 }
 
 function updateAdminUi() {
@@ -1173,11 +1182,13 @@ async function bootstrap() {
     await initAdminAccess();
     updateAdminUi();
     setupAdminPreviewToggle();
+    setupScheduleNavigation();
     setupFilters();
     setupViewSwitch();
     CalendarView.init();
     setupModal();
     await loadEvents();
+    tryOpenScheduleFromUrl();
   } catch (error) {
     console.error(error);
     const container = document.getElementById("eventsContainer");
