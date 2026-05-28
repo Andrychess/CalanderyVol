@@ -16,6 +16,7 @@ const DEFAULT_BUTTON_LABEL =
 let events = [];
 let enrollments = [];
 let currentUserId = null;
+const participantProfiles = new Map();
 /** Контакт директора из VK «Контакты» — для кнопки «Задать вопрос» */
 let groupDirectorContact = null;
 /** Есть ли у пользователя права руководства (независимо от превью) */
@@ -191,6 +192,33 @@ function getEnrollmentStatusClass(status) {
   if (status === ENROLLMENT_STATUSES.APPROVED) return "approved";
   if (status === ENROLLMENT_STATUSES.REJECTED) return "rejected";
   return "pending";
+}
+
+function getUserDisplayName(userId) {
+  const profile = participantProfiles.get(Number(userId));
+  if (!profile) return `ID ${userId}`;
+  const fullName = `${profile.last_name || ""} ${profile.first_name || ""}`.trim();
+  return fullName || `ID ${userId}`;
+}
+
+async function ensureParticipantProfiles(userIds = []) {
+  if (!VkAuth.isVkEnvironment) return;
+  const missing = [...new Set(userIds.map((id) => Number(id)).filter((id) => id > 0))]
+    .filter((id) => !participantProfiles.has(id));
+  if (!missing.length) return;
+
+  const profiles = await VkAuth.getUsersByIds(missing);
+  profiles.forEach((profile) => {
+    if (!profile?.id) return;
+    participantProfiles.set(Number(profile.id), {
+      first_name: String(profile.first_name || "").trim(),
+      last_name: String(profile.last_name || "").trim(),
+    });
+  });
+
+  if (isScheduleViewActive() && EventSchedule?.tab === "participants") {
+    EventSchedule.render();
+  }
 }
 
 function isSchedulePast(schedule) {
@@ -942,20 +970,21 @@ function renderAttendedEvents() {
     .map((record) => {
       const event = findEventById(events, record.eventId);
       if (!event) return "";
+      const firstSchedule = getEventSchedules(event)[0];
       return `
-        <div class="attended-card">
-          <div class="attended-card__meta">
-            <span class="badge enrollment-status enrollment-status--${escapeAttr(record.status)}">${escapeHtml(getEnrollmentStatusLabel(record.status))}</span>
+        <article class="attended-mini-card">
+          <h3 class="attended-mini-card__title">${escapeHtml(event.title)}</h3>
+          <div class="attended-mini-card__meta">
+            <span>${escapeHtml(formatDate(firstSchedule?.date || "") || "Дата не указана")}</span>
+            <span>${escapeHtml(formatLevelLabel(event.level) || "Уровень не указан")}</span>
           </div>
-          ${renderEventCard(event, { viewOnly: true })}
-        </div>
+        </article>
       `;
     })
     .filter(Boolean)
     .join("");
 
   container.innerHTML = cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`;
-  bindEventCardActions(container);
 }
 
 function scrollToEventFromUrl() {

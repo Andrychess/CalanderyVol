@@ -760,6 +760,9 @@ const EventSchedule = {
     const list = getEventEnrollments(event.id).sort(
       (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
     );
+    if (typeof ensureParticipantProfiles === "function") {
+      ensureParticipantProfiles(list.map((item) => item.userId));
+    }
 
     return `
       <section class="schedule-section">
@@ -773,7 +776,11 @@ const EventSchedule = {
                     (item) => `
                     <article class="participant-item" data-enrollment-id="${escapeAttr(item.id)}" data-user-id="${escapeAttr(item.userId)}">
                       <div class="participant-item__meta">
-                        <strong>ID ${escapeHtml(String(item.userId))}</strong>
+                        <strong>${escapeHtml(
+                          typeof getUserDisplayName === "function"
+                            ? getUserDisplayName(item.userId)
+                            : `ID ${String(item.userId)}`
+                        )}</strong>
                         <span class="badge enrollment-status enrollment-status--${escapeAttr(getEnrollmentStatusClass(item.status))}">${escapeHtml(getEnrollmentStatusLabel(item.status))}</span>
                       </div>
                       <p class="participant-item__date">Обновлено: ${escapeHtml(new Date(item.updatedAt).toLocaleString("ru-RU"))}</p>

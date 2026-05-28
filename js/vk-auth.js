@@ -255,6 +255,34 @@ const VkAuth = {
     return id > 0 ? `https://vk.com/id${id}` : "";
   },
 
+  async getUsersByIds(userIds = []) {
+    const ids = [...new Set(userIds.map((id) => Number(id)).filter((id) => id > 0))];
+    if (!ids.length || !this.bridge || !this.isVkEnvironment) {
+      return [];
+    }
+
+    const { appId } = this.getCommunityCredentials();
+    if (!appId) {
+      return [];
+    }
+
+    try {
+      const accessToken = await this.getGroupsAccessToken(appId);
+      const response = await this.vkApi(
+        "users.get",
+        {
+          user_ids: ids.join(","),
+          fields: "first_name,last_name",
+        },
+        accessToken
+      );
+      return Array.isArray(response) ? response : [];
+    } catch (e) {
+      console.warn("Профили пользователей VK:", e);
+      return [];
+    }
+  },
+
   async getGroupContacts(accessToken, groupId) {
     const response = await this.vkApi(
       "groups.getById",
