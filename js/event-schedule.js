@@ -17,6 +17,7 @@ const EventSchedule = {
   regulationShowPast: false,
   regulationDayDate: null,
   volunteerDayDate: null,
+  participantDecisions: new Map(),
   _regulationTimer: null,
   _ready: false,
 
@@ -211,6 +212,7 @@ const EventSchedule = {
     this.regulationShowPast = false;
     this.regulationDayDate = null;
     this.volunteerDayDate = null;
+    this.participantDecisions = new Map();
     this.draft = structuredClone(event.plan || this.emptyPlan());
     this.ensureRegulationDays(this.draft, event);
     this.ensureVolunteerDays(this.draft, event);
@@ -785,17 +787,41 @@ const EventSchedule = {
                       </div>
                       <p class="participant-item__date">Обновлено: ${escapeHtml(new Date(item.updatedAt).toLocaleString("ru-RU"))}</p>
                       <div class="participant-item__actions">
-                        <button type="button" class="secondary-btn" data-action="approve-enrollment" data-enrollment-id="${escapeAttr(item.id)}" ${item.status === "approved" ? "disabled" : ""}>Подтвердить</button>
-                        <button type="button" class="secondary-btn" data-action="reject-enrollment" data-enrollment-id="${escapeAttr(item.id)}" ${item.status === "rejected" ? "disabled" : ""}>Отклонить</button>
-                        <button type="button" class="delete-btn" data-action="delete-enrollment" data-enrollment-id="${escapeAttr(item.id)}">Удалить</button>
+                        ${this.renderParticipantDecisionControls(item)}
                       </div>
                     </article>
                   `
                   )
                   .join("")}
+              </div>
+              <div class="participant-actions-bar">
+                <button type="button" class="submit-btn" data-action="apply-participant-decisions">Принять изменения</button>
               </div>`
         }
       </section>
+    `;
+  },
+
+  renderParticipantDecisionControls(item) {
+    const selected = this.participantDecisions.get(item.id) || "none";
+    const rowName = `decision-${item.id}`;
+    return `
+      <label class="participant-choice">
+        <input type="radio" name="${escapeAttr(rowName)}" value="none" data-action="participant-decision" data-enrollment-id="${escapeAttr(item.id)}" ${selected === "none" ? "checked" : ""}>
+        <span>Без изменений</span>
+      </label>
+      <label class="participant-choice">
+        <input type="radio" name="${escapeAttr(rowName)}" value="approve" data-action="participant-decision" data-enrollment-id="${escapeAttr(item.id)}" ${selected === "approve" ? "checked" : ""}>
+        <span>Да</span>
+      </label>
+      <label class="participant-choice">
+        <input type="radio" name="${escapeAttr(rowName)}" value="reject" data-action="participant-decision" data-enrollment-id="${escapeAttr(item.id)}" ${selected === "reject" ? "checked" : ""}>
+        <span>Нет</span>
+      </label>
+      <label class="participant-choice">
+        <input type="radio" name="${escapeAttr(rowName)}" value="delete" data-action="participant-decision" data-enrollment-id="${escapeAttr(item.id)}" ${selected === "delete" ? "checked" : ""}>
+        <span>Удалить</span>
+      </label>
     `;
   },
 
@@ -981,44 +1007,47 @@ const EventSchedule = {
       });
     });
 
-    panel.querySelectorAll("[data-action=approve-enrollment]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const enrollmentId = btn.dataset.enrollmentId;
-        const target = enrollments.find((item) => item.id === enrollmentId);
-        if (!target) return;
-        await upsertEnrollment(
-          target.eventId,
-          target.userId,
-          ENROLLMENT_STATUSES.APPROVED,
-          currentUserId || target.userId
-        );
-        this.render();
-      });
-    });
-
-    panel.querySelectorAll("[data-action=reject-enrollment]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const enrollmentId = btn.dataset.enrollmentId;
-        const target = enrollments.find((item) => item.id === enrollmentId);
-        if (!target) return;
-        await upsertEnrollment(
-          target.eventId,
-          target.userId,
-          ENROLLMENT_STATUSES.REJECTED,
-          currentUserId || target.userId
-        );
-        this.render();
-      });
-    });
-
-    panel.querySelectorAll("[data-action=delete-enrollment]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const enrollmentId = btn.dataset.enrollmentId;
+    panel.querySelectorAll("[data-action=participant-decision]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const enrollmentId = input.dataset.enrollmentId;
         if (!enrollmentId) return;
-        await removeEnrollmentById(enrollmentId);
-        this.render();
+        this.participantDecisions.set(enrollmentId, input.value || "none");
       });
     });
+
+    panel
+      .querySelector("[data-action=apply-participant-decisions]")
+      ?.addEventListener("click", async (clickEvent) => {
+        const btn = clickEvent.currentTarget;
+        const decisions = [...this.participantDecisions.entries()]
+          .filter(([, action]) => action && action !== "none")
+          .map(([enrollmentId, action]) => ({ enrollmentId, action }));
+
+        if (!decisions.length) {
+          alert("Выберите действия для заявок и затем примените изменения.");
+          return;
+        }
+
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Сохраняем...";
+        try {
+          const changed = await applyEnrollmentDecisions(
+            decisions,
+            currentUserId || null
+          );
+          this.participantDecisions = new Map();
+          this.render();
+          if (changed > 0) {
+            renderCurrentView();
+          }
+        } catch (error) {
+          alert(error.message || "Не удалось применить изменения");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      });
   },
 
   bindScheduleExportActions(event) {

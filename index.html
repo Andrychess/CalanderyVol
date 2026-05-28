@@ -22,6 +22,7 @@
         <button type="button" class="view-switch-btn active" data-view="list" role="tab" aria-selected="true">Список</button>
         <button type="button" class="view-switch-btn" data-view="calendar" role="tab" aria-selected="false">Календарь</button>
         <button type="button" class="view-switch-btn" data-view="attended" role="tab" aria-selected="false">Посещённые мероприятия</button>
+        <button type="button" class="view-switch-btn hidden" id="usersRegistryViewBtn" data-view="users" role="tab" aria-selected="false">Пользователи</button>
     </div>
 
     <div class="toolbar">
@@ -64,6 +65,12 @@
     <div id="attendedView" class="hidden" aria-hidden="true">
         <div id="attendedContainer" class="events-list">
             <div class="loading">Загрузка ваших записей...</div>
+        </div>
+    </div>
+
+    <div id="usersView" class="hidden" aria-hidden="true">
+        <div id="usersContainer" class="events-list">
+            <div class="loading">Загрузка пользователей...</div>
         </div>
     </div>
     </div>

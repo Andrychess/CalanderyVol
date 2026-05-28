@@ -774,6 +774,58 @@ async function removeEnrollmentById(enrollmentId) {
   await reloadEventsFromStorage();
 }
 
+async function applyEnrollmentDecisions(decisions = [], updatedBy = currentUserId) {
+  const valid = Array.isArray(decisions)
+    ? decisions.filter(
+        (item) =>
+          item &&
+          item.enrollmentId &&
+          (item.action === "approve" || item.action === "reject" || item.action === "delete")
+      )
+    : [];
+
+  if (!valid.length) return 0;
+
+  const byId = new Map(enrollments.map((item) => [item.id, item]));
+  let changed = 0;
+
+  valid.forEach((decision) => {
+    const current = byId.get(decision.enrollmentId);
+    if (!current) return;
+
+    if (decision.action === "delete") {
+      byId.delete(decision.enrollmentId);
+      changed += 1;
+      return;
+    }
+
+    const nextStatus =
+      decision.action === "approve"
+        ? ENROLLMENT_STATUSES.APPROVED
+        : ENROLLMENT_STATUSES.REJECTED;
+
+    if (current.status === nextStatus) return;
+
+    byId.set(
+      decision.enrollmentId,
+      normalizeEnrollment({
+        ...current,
+        status: nextStatus,
+        updatedAt: new Date().toISOString(),
+        updatedBy: Number(updatedBy) || null,
+      })
+    );
+    changed += 1;
+  });
+
+  if (!changed) return 0;
+
+  enrollments = [...byId.values()];
+  await saveEvents();
+  await reloadEventsFromStorage();
+  return changed;
+}
+
 // --- Карточки: обработчики (делегирование после innerHTML) ---
 
 function bindEventCardActions(container) {
@@ -878,9 +930,12 @@ function openEventViewModal(eventId) {
 
 function setViewMode(mode) {
   viewMode =
-    mode === "calendar" || mode === "attended"
+    mode === "calendar" || mode === "attended" || mode === "users"
       ? mode
       : "list";
+  if (viewMode === "users" && !isAdmin) {
+    viewMode = "list";
+  }
 
   document.querySelectorAll(".view-switch-btn").forEach((btn) => {
     const active = btn.dataset.view === viewMode;
@@ -898,7 +953,12 @@ function setViewMode(mode) {
   const attendedView = document.getElementById("attendedView");
   attendedView?.classList.toggle("hidden", viewMode !== "attended");
   attendedView?.setAttribute("aria-hidden", viewMode !== "attended" ? "true" : "false");
-  document.querySelector(".toolbar")?.classList.toggle("hidden", viewMode === "attended");
+  const usersView = document.getElementById("usersView");
+  usersView?.classList.toggle("hidden", viewMode !== "users");
+  usersView?.setAttribute("aria-hidden", viewMode !== "users" ? "true" : "false");
+  document
+    .querySelector(".toolbar")
+    ?.classList.toggle("hidden", viewMode === "attended" || viewMode === "users");
 
   renderCurrentView();
 }
@@ -924,6 +984,11 @@ function renderCurrentView() {
 
   if (viewMode === "attended") {
     renderAttendedEvents();
+    return;
+  }
+
+  if (viewMode === "users") {
+    renderUsersRegistry();
     return;
   }
 
@@ -985,6 +1050,70 @@ function renderAttendedEvents() {
     .join("");
 
   container.innerHTML = cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`;
+}
+
+function buildUsersRegistryItems() {
+  const grouped = new Map();
+  enrollments.forEach((item) => {
+    const userId = Number(item.userId);
+    if (!userId) return;
+    if (!grouped.has(userId)) {
+      grouped.set(userId, {
+        userId,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+        events: new Set(),
+      });
+    }
+    const target = grouped.get(userId);
+    if (item.status === ENROLLMENT_STATUSES.APPROVED) target.approved += 1;
+    else if (item.status === ENROLLMENT_STATUSES.REJECTED) target.rejected += 1;
+    else target.pending += 1;
+    target.events.add(String(item.eventId));
+  });
+
+  return [...grouped.values()].sort((a, b) => {
+    const totalA = a.pending + a.approved + a.rejected;
+    const totalB = b.pending + b.approved + b.rejected;
+    return totalB - totalA;
+  });
+}
+
+function renderUsersRegistry() {
+  const container = document.getElementById("usersContainer");
+  if (!container) return;
+
+  if (!isAdmin) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔒</div><h2>Доступ только для администратора</h2></div>`;
+    return;
+  }
+
+  const items = buildUsersRegistryItems();
+  ensureParticipantProfiles(items.map((item) => item.userId));
+
+  if (!items.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><h2>Пользователей пока нет</h2><p>Список формируется автоматически из заявок.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = items
+    .map((item) => {
+      const eventsCount = item.events.size;
+      return `
+        <article class="user-registry-card">
+          <h3 class="user-registry-card__name">${escapeHtml(getUserDisplayName(item.userId))}</h3>
+          <p class="user-registry-card__id">ID: ${escapeHtml(String(item.userId))}</p>
+          <div class="user-registry-card__stats">
+            <span class="badge enrollment-status enrollment-status--pending">Ожидает: ${item.pending}</span>
+            <span class="badge enrollment-status enrollment-status--approved">Подтверждено: ${item.approved}</span>
+            <span class="badge enrollment-status enrollment-status--rejected">Отклонено: ${item.rejected}</span>
+          </div>
+          <p class="user-registry-card__events">Мероприятий: ${eventsCount}</p>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function scrollToEventFromUrl() {
@@ -1288,8 +1417,11 @@ function setupAdminPreviewToggle() {
 
 function updateAdminUi() {
   updateAdminPreviewToggle();
-  const hideAdminToolbar = !isAdmin || viewMode === "attended";
+  const hideAdminToolbar = !isAdmin || viewMode === "attended" || viewMode === "users";
   document.getElementById("adminToolbar")?.classList.toggle("hidden", hideAdminToolbar);
+  document
+    .getElementById("usersRegistryViewBtn")
+    ?.classList.toggle("hidden", !isAdmin);
   document
     .getElementById("pastEventsFilterBtn")
     ?.classList.toggle("hidden", !isAdmin);
@@ -1307,6 +1439,10 @@ function updateAdminUi() {
   }
 
   if (isAdmin) {
+    if (viewMode === "users") {
+      setSubtitle("Реестр пользователей");
+      return;
+    }
     if (viewMode === "attended") {
       setSubtitle("История посещений");
       return;
