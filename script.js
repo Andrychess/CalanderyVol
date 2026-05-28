@@ -241,7 +241,7 @@ function getEventLevelPoints(level) {
   return EVENT_LEVEL_POINTS[resolveEventLevelKey(level)] ?? 0;
 }
 
-function sumPastEventsPoints(eventList) {
+function sumEventsLevelPoints(eventList) {
   return eventList.reduce((sum, event) => sum + getEventLevelPoints(event.level), 0);
 }
 
@@ -252,31 +252,19 @@ function formatPoints(value) {
 function formatAttendedEventsCountLabel(count) {
   const n = Math.abs(count) % 100;
   const n1 = n % 10;
-  const word = n1 === 1 && n !== 11 ? "прошедшему мероприятию" : "прошедшим мероприятиям";
+  const word = n1 === 1 && n !== 11 ? "посещённому мероприятию" : "посещённым мероприятиям";
   return `${count} ${word}`;
 }
 
-/** Уникальные прошедшие мероприятия из заявок текущего пользователя */
-function getMyPastAttendedEvents() {
-  const seen = new Set();
-  const result = [];
-
-  getMyEnrollmentRecords().forEach((record) => {
-    const eventId = String(record.eventId);
-    if (seen.has(eventId)) return;
-
-    const event = findEventById(events, record.eventId);
-    if (!event || !isEventPast(event)) return;
-
-    seen.add(eventId);
-    result.push(event);
-  });
-
-  return result;
+/** Мероприятия из вкладки «Посещённые» — те же, к которым пользователь присоединился */
+function getMyAttendedEventsFromRecords(records) {
+  return records
+    .map((record) => findEventById(events, record.eventId))
+    .filter(Boolean);
 }
 
 function renderAttendedPointsSummary(eventList) {
-  const total = sumPastEventsPoints(eventList);
+  const total = sumEventsLevelPoints(eventList);
   const count = eventList.length;
   const countLabel = formatAttendedEventsCountLabel(count);
 
@@ -1264,11 +1252,11 @@ function renderAttendedEvents() {
     .filter(Boolean)
     .join("");
 
-  const pastAttended = getMyPastAttendedEvents();
+  const attendedForPoints = getMyAttendedEventsFromRecords(myRecords);
 
   container.innerHTML =
     (cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`) +
-    renderAttendedPointsSummary(pastAttended);
+    renderAttendedPointsSummary(attendedForPoints);
 }
 
 function buildUsersRegistryItems() {
