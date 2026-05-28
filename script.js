@@ -9,6 +9,15 @@
  */
 const EVENT_LEVELS = LevelColors.order;
 
+/** Оценочные баллы за прошедшее мероприятие по уровню (для ознакомления) */
+const EVENT_LEVEL_POINTS = {
+  вузовский: 100,
+  городской: 100,
+  региональный: 500,
+  всероссийский: 700,
+  международный: 800,
+};
+
 const DEFAULT_LOCATION = "ЮРГПУ(НПИ)";
 const DEFAULT_BUTTON_LABEL =
   "Подтвердить участие (перейти в информационный чат)";
@@ -221,6 +230,44 @@ function mapLegacyLevel(level) {
     Федеральное: "всероссийский",
   };
   return map[level] || "региональный";
+}
+
+function resolveEventLevelKey(level) {
+  if (EVENT_LEVELS.includes(level)) return level;
+  return mapLegacyLevel(level);
+}
+
+function getEventLevelPoints(level) {
+  return EVENT_LEVEL_POINTS[resolveEventLevelKey(level)] ?? 0;
+}
+
+function sumPastEventsPoints(eventList) {
+  return eventList.reduce((sum, event) => sum + getEventLevelPoints(event.level), 0);
+}
+
+function formatPoints(value) {
+  return Number(value).toLocaleString("ru-RU");
+}
+
+function formatPastEventsCountLabel(count) {
+  const n = Math.abs(count) % 100;
+  const n1 = n % 10;
+  const word = n1 === 1 && n !== 11 ? "мероприятию" : "мероприятиям";
+  return `${count} ${word}`;
+}
+
+function renderPastEventsPointsSummary(eventList) {
+  const total = sumPastEventsPoints(eventList);
+  const count = eventList.length;
+  const countLabel = formatPastEventsCountLabel(count);
+
+  return `
+    <section class="past-events-points" aria-label="Оценка баллов архива">
+      <p class="past-events-points__total">≈ <strong>${escapeHtml(formatPoints(total))}</strong> баллов</p>
+      <p class="past-events-points__meta">По ${escapeHtml(countLabel)} в списке</p>
+      <p class="past-events-points__note">Баллы приблизительные и служат только для ознакомления.</p>
+    </section>
+  `;
 }
 
 function getEventSchedules(event) {
@@ -1147,14 +1194,18 @@ function renderCurrentView() {
 function renderEvents() {
   const container = document.getElementById("eventsContainer");
   const visible = getFilteredEvents();
+  const showPastPoints = isAdmin && filterState.showPast;
 
   if (!visible.length) {
-    container.innerHTML = renderEmptyState();
+    container.innerHTML =
+      renderEmptyState() + (showPastPoints ? renderPastEventsPointsSummary(visible) : "");
     document.getElementById("emptyAddBtn")?.addEventListener("click", openAddModal);
     return;
   }
 
-  container.innerHTML = visible.map((event) => renderEventCard(event)).join("");
+  container.innerHTML =
+    visible.map((event) => renderEventCard(event)).join("") +
+    (showPastPoints ? renderPastEventsPointsSummary(visible) : "");
   bindEventCardActions(container);
   scrollToEventFromUrl();
 }

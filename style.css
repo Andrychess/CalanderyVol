@@ -202,6 +202,40 @@ body.app-shell {
   line-height: 1.4;
 }
 
+.past-events-points {
+  margin-top: 6px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, #f0f7fc 0%, #e8f4fa 100%);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+
+.past-events-points__total {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.past-events-points__total strong {
+  font-size: 1.375rem;
+  font-weight: 800;
+  color: var(--brand-primary);
+}
+
+.past-events-points__meta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.past-events-points__note {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 /* ── View switch ── */
 .view-switch {
   display: flex;
