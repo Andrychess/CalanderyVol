@@ -249,23 +249,42 @@ function formatPoints(value) {
   return Number(value).toLocaleString("ru-RU");
 }
 
-function formatPastEventsCountLabel(count) {
+function formatAttendedEventsCountLabel(count) {
   const n = Math.abs(count) % 100;
   const n1 = n % 10;
-  const word = n1 === 1 && n !== 11 ? "мероприятию" : "мероприятиям";
+  const word = n1 === 1 && n !== 11 ? "прошедшему мероприятию" : "прошедшим мероприятиям";
   return `${count} ${word}`;
 }
 
-function renderPastEventsPointsSummary(eventList) {
+/** Уникальные прошедшие мероприятия из заявок текущего пользователя */
+function getMyPastAttendedEvents() {
+  const seen = new Set();
+  const result = [];
+
+  getMyEnrollmentRecords().forEach((record) => {
+    const eventId = String(record.eventId);
+    if (seen.has(eventId)) return;
+
+    const event = findEventById(events, record.eventId);
+    if (!event || !isEventPast(event)) return;
+
+    seen.add(eventId);
+    result.push(event);
+  });
+
+  return result;
+}
+
+function renderAttendedPointsSummary(eventList) {
   const total = sumPastEventsPoints(eventList);
   const count = eventList.length;
-  const countLabel = formatPastEventsCountLabel(count);
+  const countLabel = formatAttendedEventsCountLabel(count);
 
   return `
-    <section class="past-events-points" aria-label="Оценка баллов архива">
-      <p class="past-events-points__total">≈ <strong>${escapeHtml(formatPoints(total))}</strong> баллов</p>
-      <p class="past-events-points__meta">По ${escapeHtml(countLabel)} в списке</p>
-      <p class="past-events-points__note">Баллы приблизительные и служат только для ознакомления.</p>
+    <section class="attended-points" aria-label="Оценка баллов за посещённые мероприятия">
+      <p class="attended-points__total">≈ <strong>${escapeHtml(formatPoints(total))}</strong> баллов</p>
+      <p class="attended-points__meta">По ${escapeHtml(countLabel)}</p>
+      <p class="attended-points__note">Баллы приблизительные и служат только для ознакомления.</p>
     </section>
   `;
 }
@@ -1194,18 +1213,14 @@ function renderCurrentView() {
 function renderEvents() {
   const container = document.getElementById("eventsContainer");
   const visible = getFilteredEvents();
-  const showPastPoints = isAdmin && filterState.showPast;
 
   if (!visible.length) {
-    container.innerHTML =
-      renderEmptyState() + (showPastPoints ? renderPastEventsPointsSummary(visible) : "");
+    container.innerHTML = renderEmptyState();
     document.getElementById("emptyAddBtn")?.addEventListener("click", openAddModal);
     return;
   }
 
-  container.innerHTML =
-    visible.map((event) => renderEventCard(event)).join("") +
-    (showPastPoints ? renderPastEventsPointsSummary(visible) : "");
+  container.innerHTML = visible.map((event) => renderEventCard(event)).join("");
   bindEventCardActions(container);
   scrollToEventFromUrl();
 }
@@ -1249,7 +1264,11 @@ function renderAttendedEvents() {
     .filter(Boolean)
     .join("");
 
-  container.innerHTML = cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`;
+  const pastAttended = getMyPastAttendedEvents();
+
+  container.innerHTML =
+    (cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`) +
+    renderAttendedPointsSummary(pastAttended);
 }
 
 function buildUsersRegistryItems() {
