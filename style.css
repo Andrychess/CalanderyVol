@@ -169,6 +169,39 @@ body.app-shell {
   position: relative;
 }
 
+.json-storage-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--text-inverse);
+  white-space: nowrap;
+}
+
+.json-storage-badge--schedule {
+  position: static;
+  flex-shrink: 0;
+  margin-left: auto;
+  margin-right: 8px;
+  background: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.event-card-archived .event-archived-note {
+  margin-top: 10px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 /* ── View switch ── */
 .view-switch {
   display: flex;

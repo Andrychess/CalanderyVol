@@ -84,6 +84,34 @@ function normalizeSchedules(raw) {
 }
 
 function normalizeEvent(raw) {
+  if (raw?.archived) {
+    const schedules = normalizeSchedules(raw)
+      .map((item) => ({ date: item.date, time: "", timeEnd: "" }))
+      .filter((item) => item.date);
+    const first = schedules[0] || { date: raw.date || "", time: "", timeEnd: "" };
+
+    return {
+      id: String(raw.id || ""),
+      title: raw.title || "",
+      schedules,
+      date: first.date,
+      time: "",
+      timeEnd: "",
+      level: EVENT_LEVELS.includes(raw.level)
+        ? raw.level
+        : mapLegacyLevel(raw.level),
+      archived: true,
+      location: "",
+      enrollment: "closed",
+      functionality: "",
+      conditions: "",
+      description: "",
+      buttonLabel: "",
+      buttonUrl: "",
+      plan: EventSchedule.emptyPlan(),
+    };
+  }
+
   const functionality = normalizeTextField(raw.functionality ?? raw.tasks);
   const conditions = normalizeTextField(raw.conditions);
   const schedules = normalizeSchedules(raw);
@@ -113,6 +141,41 @@ function normalizeEvent(raw) {
     buttonUrl: raw.buttonUrl || raw.link || "",
     plan: raw?.plan ? EventSchedule.normalizePlan(raw.plan) : EventSchedule.emptyPlan(),
   };
+}
+
+function isEventArchived(event) {
+  return event?.archived === true;
+}
+
+/** Прошедшее мероприятие: только id, название, даты, уровень (экономия JsonBox) */
+function compactPastEvent(event) {
+  const normalized = isEventArchived(event) ? event : normalizeEvent(event);
+  const schedules = getEventSchedules(normalized).map((item) => ({
+    date: item.date,
+    time: "",
+    timeEnd: "",
+  }));
+  const first = schedules[0] || { date: normalized.date || "", time: "", timeEnd: "" };
+
+  return {
+    id: String(normalized.id),
+    title: normalized.title || "",
+    level: normalized.level,
+    date: first.date,
+    schedules,
+    archived: true,
+  };
+}
+
+/** Сжимает прошедшие карточки; возвращает true, если что-то изменилось */
+function trimPastEventsData() {
+  let changed = false;
+  events = events.map((event) => {
+    if (!isEventPast(event) || isEventArchived(event)) return event;
+    changed = true;
+    return compactPastEvent(event);
+  });
+  return changed;
 }
 
 function normalizeEnrollment(raw = {}) {
@@ -533,6 +596,31 @@ function setSubtitle(text) {
   document.getElementById("appSubtitle").textContent = text;
 }
 
+/** Оценочный размер JSON, который уходит в JsonBox */
+function estimateJsonStorageBytes() {
+  const payload = { events, enrollments };
+  return new Blob([JSON.stringify(payload)]).size;
+}
+
+function formatStorageSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function updateJsonStorageBadge() {
+  const show = hasAdminAccess;
+  const label = `JSON: ${formatStorageSize(estimateJsonStorageBytes())}`;
+  const title = "Оценочный размер данных в JsonBox (мероприятия и заявки)";
+
+  document.querySelectorAll(".json-storage-badge").forEach((el) => {
+    el.classList.toggle("hidden", !show);
+    if (!show) return;
+    el.textContent = label;
+    el.title = title;
+  });
+}
+
 function setFormError(message) {
   document.getElementById("formError").textContent = message || "";
 }
@@ -578,9 +666,17 @@ async function loadEvents() {
     const payload = await JsonBoxStorage.getAppData();
     events = payload.events.map(normalizeEvent);
     enrollments = dedupeEnrollments(payload.enrollments);
+    if (trimPastEventsData()) {
+      try {
+        await JsonBoxStorage.saveAppData({ events, enrollments });
+      } catch (trimError) {
+        console.warn("Не удалось сохранить сжатые прошедшие мероприятия:", trimError);
+      }
+    }
     if (container) {
       renderCurrentView();
     }
+    updateJsonStorageBadge();
   } catch (error) {
     console.error(error);
     if (container) {
@@ -593,10 +689,12 @@ async function loadEvents() {
 
 async function saveEvents() {
   enrollments = dedupeEnrollments(enrollments);
+  trimPastEventsData();
   await JsonBoxStorage.saveAppData({
     events,
     enrollments,
   });
+  updateJsonStorageBadge();
 }
 
 /** После save — подтянуть с сервера и убрать дубликаты id */
@@ -607,6 +705,8 @@ async function reloadEventsFromStorage() {
   loaded.forEach((item) => byId.set(item.id, item));
   events = [...byId.values()];
   enrollments = dedupeEnrollments(payload.enrollments);
+  trimPastEventsData();
+  updateJsonStorageBadge();
 }
 
 function generateEventId() {
@@ -683,7 +783,38 @@ function renderEmptyState() {
   `;
 }
 
+function renderArchivedEventCard(event, options = {}) {
+  const { viewOnly = false } = options;
+
+  return `
+    <article class="event-card event-card-past event-card-archived" data-id="${escapeHtml(event.id)}">
+      <div class="card-top-row">
+        <div class="event-header ${LevelColors.className(event.level)}">
+          <h2 class="event-title">${escapeHtml(event.title)}</h2>
+          ${renderSchedulesList(event)}
+        </div>
+      </div>
+      <div class="badge-row">
+        <span class="badge level ${LevelColors.className(event.level)}">${escapeHtml(formatLevelLabel(event.level))}</span>
+        <span class="badge enrollment-closed">Архив</span>
+      </div>
+      <p class="event-archived-note">Сохранены только дата, название и уровень.</p>
+      ${
+        !viewOnly && isAdmin
+          ? `<div class="edit-buttons no-export">
+              <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
+
 function renderEventCard(event, options = {}) {
+  if (isEventArchived(event)) {
+    return renderArchivedEventCard(event, options);
+  }
+
   const { viewOnly = false } = options;
   const functionalityItems = textToList(event.functionality);
   const conditionItems = textToList(event.conditions);
@@ -936,6 +1067,9 @@ function showEventViewModal(visible) {
 function openEventViewModal(eventId) {
   const event = findEventById(events, eventId);
   if (!event) return;
+  if (isEventArchived(event) && !isAdmin) {
+    return;
+  }
 
   const body = document.getElementById("eventViewBody");
   body.innerHTML = renderEventCard(event, { viewOnly: true });
@@ -1188,6 +1322,13 @@ function openAddModal() {
 function openEditModal(eventId) {
   const event = findEventById(events, eventId);
   if (!event) return;
+
+  if (isEventArchived(event)) {
+    alert(
+      "Архивная запись: полные данные удалены для экономии места. Доступно только удаление карточки."
+    );
+    return;
+  }
 
   editingEventId = eventId;
   document.getElementById("modalTitle").textContent = "Редактировать мероприятие";
@@ -1493,6 +1634,8 @@ function updateAdminUi() {
   } else {
     setSubtitle(viewMode === "attended" ? "Мои посещённые мероприятия" : "Актуальные мероприятия");
   }
+
+  updateJsonStorageBadge();
 }
 
 function setupFilters() {

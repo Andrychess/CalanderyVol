@@ -14,6 +14,7 @@
 <body class="app-shell">
     <div id="mainView">
     <div class="app-header">
+        <span id="jsonStorageBadge" class="json-storage-badge hidden" aria-live="polite" title="Оценочный размер данных в JsonBox"></span>
         <h1>Мероприятия</h1>
         <p class="subtitle" id="appSubtitle">Загрузка...</p>
     </div>
@@ -78,6 +79,7 @@
     <div id="scheduleView" class="hidden schedule-page-view">
         <div class="schedule-page__top">
             <button type="button" class="schedule-back-btn" id="scheduleBackLink">← К мероприятиям</button>
+            <span id="jsonStorageBadgeSchedule" class="json-storage-badge json-storage-badge--schedule hidden" aria-live="polite" title="Оценочный размер данных в JsonBox"></span>
             <button type="button" class="toggle-btn hidden" id="scheduleAdminPreviewToggleBtn" aria-pressed="false">Как пользователь</button>
         </div>
 
