@@ -1,3 +1,7 @@
+/**
+ * VK Mini App: Bridge, проверка прав руководства сообщества, API groups,
+ * контакт директора, хранилище избранного (VK Storage / localStorage).
+ */
 const VK_API_VERSION = "5.199";
 
 /** Роли с правом вести мероприятия в сообществе (владелец, админ, редактор, модератор) */
@@ -12,6 +16,7 @@ const VkAuth = {
   bridge: null,
   isVkEnvironment: false,
 
+  /** Инициализация Bridge; вне VK — только системная тема и dev-режим */
   async init() {
     if (typeof vkBridge === "undefined") {
       VkTheme.init(null);
@@ -37,6 +42,7 @@ const VkAuth = {
     }
   },
 
+  /** ID сообщества из query (?vk_group_id) или fallback из config */
   getLaunchGroupId() {
     const params = new URLSearchParams(window.location.search);
     const fromQuery =
@@ -49,6 +55,15 @@ const VkAuth = {
     return window.APP_CONFIG?.VK_GROUP_ID || 0;
   },
 
+  getCommunityCredentials() {
+    const cfg = window.APP_CONFIG || {};
+    return {
+      appId: cfg.VK_APP_ID,
+      groupId: this.getLaunchGroupId() || cfg.VK_GROUP_ID,
+    };
+  },
+
+  /** Токен пользователя с правом groups — для groups.getById, getMembers */
   async getGroupsAccessToken(appId) {
     const { access_token: accessToken } = await this.bridge.send(
       "VKWebAppGetAuthToken",
@@ -169,10 +184,12 @@ const VkAuth = {
     );
   },
 
+  /**
+   * Редактирование карточек: сначала флаги текущего пользователя в группе,
+   * затем точный поиск в managers (нужен user id).
+   */
   async isCommunityManager() {
-    const cfg = window.APP_CONFIG || {};
-    const appId = cfg.VK_APP_ID;
-    const groupId = this.getLaunchGroupId() || cfg.VK_GROUP_ID;
+    const { appId, groupId } = this.getCommunityCredentials();
 
     if (!this.bridge || !appId || !groupId) {
       return false;
@@ -182,20 +199,12 @@ const VkAuth = {
       const accessToken = await this.getGroupsAccessToken(appId);
       const userId = await this.getCurrentUserId();
 
-      const viaGetById = await this.hasLeaderRoleViaGetById(
-        accessToken,
-        groupId
-      );
-      if (viaGetById) {
+      if (await this.hasLeaderRoleViaGetById(accessToken, groupId)) {
         return true;
       }
 
       if (userId) {
-        return await this.hasLeaderRoleViaManagers(
-          accessToken,
-          groupId,
-          userId
-        );
+        return this.hasLeaderRoleViaManagers(accessToken, groupId, userId);
       }
 
       return false;
@@ -205,6 +214,7 @@ const VkAuth = {
     }
   },
 
+  /** Ссылки из админки: vk.me без схемы, принудительно https */
   normalizeLink(url) {
     if (!url) return "";
     let link = String(url).trim();
@@ -265,10 +275,7 @@ const VkAuth = {
       return null;
     }
 
-    const cfg = window.APP_CONFIG || {};
-    const appId = cfg.VK_APP_ID;
-    const groupId = this.getLaunchGroupId() || cfg.VK_GROUP_ID;
-
+    const { appId, groupId } = this.getCommunityCredentials();
     if (!appId || !groupId) {
       return null;
     }
@@ -276,6 +283,7 @@ const VkAuth = {
     try {
       const accessToken = await this.getGroupsAccessToken(appId);
       const contacts = await this.getGroupContacts(accessToken, groupId);
+
       return (
         contacts.find(
           (contact) => contact?.user_id && this.isDirectorPosition(contact.desc)
@@ -329,6 +337,7 @@ const VkAuth = {
 
 const FAVORITES_STORAGE_KEY = "cal_favorite_events";
 
+/** ID избранных мероприятий — синхронизация через VK Storage в mini app */
 const Favorites = {
   ids: new Set(),
 

@@ -1,5 +1,9 @@
-/** Расписание: только подмена блоков на index.html, без смены URL (важно для VK Mini App) */
+/**
+ * Навигация «Расписание» внутри index.html (SPA).
+ * Не меняем window.location — в webview VK иначе ломается контекст mini app.
+ */
 
+/** event id после редиректа со schedule.html */
 const PENDING_SCHEDULE_KEY = "cal_pending_schedule";
 
 function isScheduleViewActive() {
@@ -45,6 +49,7 @@ function closeScheduleView() {
   if (!mainView || !scheduleView) return;
   if (scheduleView.classList.contains("hidden")) return;
 
+  // Таймер подсветки «текущего» пункта регламента — сбрасываем при уходе
   if (EventSchedule._regulationTimer) {
     clearInterval(EventSchedule._regulationTimer);
     EventSchedule._regulationTimer = null;

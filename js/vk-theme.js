@@ -1,4 +1,7 @@
-/** Синхронизация темы мини-приложения с VK (светлая / тёмная) */
+/**
+ * Синхронизация темы с VK (VKWebAppGetConfig / UpdateConfig) и системой.
+ * data-theme на <html> + цвет status bar через VKWebAppSetViewSettings.
+ */
 const VkTheme = {
   appearance: "light",
   _bridgeBound: false,
@@ -69,6 +72,7 @@ const VkTheme = {
     const bridge = typeof vkBridge !== "undefined" ? vkBridge : null;
     if (!bridge) return;
 
+    // На тёмном фоне — светлые иконки статус-бара и наоборот
     const statusBarStyle = theme === "dark" ? "light" : "dark";
 
     bridge

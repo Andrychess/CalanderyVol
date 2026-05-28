@@ -7,5 +7,6 @@ window.APP_CONFIG = {
   JSONBOX_API_KEY_READONLY: "ro_ВАШ_КЛЮЧ_ТОЛЬКО_ДЛЯ_ЧТЕНИЯ",
   VK_APP_ID: 54607109,
   VK_GROUP_ID: 87712996,
+  /** Только локально вне VK: prompt при открытии в обычном браузере */
   DEV_ADMIN_PASSWORD: "",
 };

@@ -21,6 +21,7 @@
     <div class="view-switch" role="tablist" aria-label="Режим просмотра">
         <button type="button" class="view-switch-btn active" data-view="list" role="tab" aria-selected="true">Список</button>
         <button type="button" class="view-switch-btn" data-view="calendar" role="tab" aria-selected="false">Календарь</button>
+        <button type="button" class="view-switch-btn" data-view="attended" role="tab" aria-selected="false">Посещённые мероприятия</button>
     </div>
 
     <div class="toolbar">
@@ -59,6 +60,12 @@
             <div class="loading">Загрузка календаря...</div>
         </div>
     </div>
+
+    <div id="attendedView" class="hidden" aria-hidden="true">
+        <div id="attendedContainer" class="events-list">
+            <div class="loading">Загрузка ваших записей...</div>
+        </div>
+    </div>
     </div>
 
     <div id="scheduleView" class="hidden schedule-page-view">
@@ -76,6 +83,7 @@
             <div class="schedule-tabs" role="tablist" aria-label="Разделы расписания">
                 <button type="button" class="schedule-tab active" data-tab="regulations" role="tab" aria-selected="true">Регламент мероприятия</button>
                 <button type="button" class="schedule-tab" data-tab="volunteer" role="tab" aria-selected="false">Волонтерская смена</button>
+                <button type="button" class="schedule-tab hidden" data-tab="participants" role="tab" aria-selected="false">Участники</button>
             </div>
 
             <div id="schedulePanel" class="schedule-panel"></div>
@@ -149,6 +157,9 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <!-- Порядок важен: utils/format → jsonbox/vk → модули UI → script.js -->
+    <script src="js/utils.js"></script>
+    <script src="js/format.js"></script>
     <script src="js/jsonbox.js"></script>
     <script src="js/vk-auth.js"></script>
     <script src="js/export-png.js"></script>

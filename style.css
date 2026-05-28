@@ -757,6 +757,11 @@ body.app-shell {
   filter: brightness(0.95);
 }
 
+.join-btn--loading {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
 .join-btn--disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -2069,6 +2074,71 @@ form textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.attended-card {
+  margin-bottom: 14px;
+}
+
+.attended-card__meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.enrollment-status {
+  border: 1px solid transparent;
+}
+
+.enrollment-status--pending {
+  background: rgba(38, 105, 184, 0.12);
+  color: var(--primary);
+  border-color: rgba(38, 105, 184, 0.22);
+}
+
+.enrollment-status--approved {
+  background: rgba(113, 193, 122, 0.2);
+  color: #2f7a38;
+  border-color: rgba(113, 193, 122, 0.35);
+}
+
+.enrollment-status--rejected {
+  background: rgba(224, 82, 82, 0.14);
+  color: #b14343;
+  border-color: rgba(224, 82, 82, 0.3);
+}
+
+.participant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.participant-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.participant-item__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.participant-item__date {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  margin-bottom: 10px;
+}
+
+.participant-item__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .schedule-empty,

@@ -1,3 +1,7 @@
+/**
+ * PNG регламента и волонтёрской смены на выбранный день.
+ * Лимиты строк — чтобы влезло в кадр 1080×1920 без микрошрифта.
+ */
 const SCHEDULE_EXPORT_REG_LIMIT = 14;
 const SCHEDULE_EXPORT_VOL_ROWS_LIMIT = 10;
 

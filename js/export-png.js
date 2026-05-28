@@ -1,4 +1,7 @@
-/** Вертикальный формат для сторис / клипов VK (9:16) */
+/**
+ * Снимок DOM → PNG (html2canvas). На мобильном/VK: ShowImages → share → модалка,
+ * т.к. programmatic download в webview часто недоступен.
+ */
 const PNG_EXPORT_WIDTH = 1080;
 const PNG_EXPORT_HEIGHT = 1920;
 
@@ -29,6 +32,7 @@ const PngExport = {
     );
   },
 
+  /** В VK и на телефоне не полагаемся на <a download> */
   needsMobileSaveFlow() {
     return this.isMobileDevice() || this.isVkMiniApp();
   },
@@ -224,7 +228,7 @@ const PngExport = {
     }
 
     const isMobile = this.needsMobileSaveFlow();
-    const scale = isMobile ? 0.75 : 1;
+    const scale = isMobile ? 0.75 : 1; // меньше scale — меньше риск OOM на телефоне
 
     frame.classList.add("png-export-story--capture");
     document.body.appendChild(frame);
@@ -267,6 +271,7 @@ const PngExport = {
   },
 };
 
+/** Экспорт карточки мероприятия (buildEventExportStoryElement в script.js) */
 const CardPngExport = {
   sanitizeFilename(title) {
     return PngExport.sanitizeFilename(title);

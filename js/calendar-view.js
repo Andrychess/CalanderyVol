@@ -1,3 +1,7 @@
+/**
+ * Режим «Календарь»: сетка месяца, маркеры уровней, список мероприятий на день.
+ * Использует getFilteredEvents() из script.js (те же фильтры, что и список).
+ */
 const MONTH_NAMES = [
   "Январь",
   "Февраль",
@@ -57,6 +61,7 @@ const CalendarView = {
     this.render();
   },
 
+  /** dateKey (YYYY-MM-DD) → [{ event, schedule }, …] */
   buildEntriesMap(eventList) {
     const map = new Map();
 
@@ -102,6 +107,7 @@ const CalendarView = {
   getMonthCells(year, month) {
     const first = new Date(year, month, 1);
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    // Понедельник = 0 (европейская сетка), в JS getDay(): вс = 0
     let startWeekday = first.getDay();
     startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
 

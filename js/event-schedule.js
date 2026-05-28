@@ -1,4 +1,14 @@
-/** Страница «Расписание»: регламент + волонтерская смена (Гант) */
+/**
+ * Расписание мероприятия: event.plan в JsonBox
+ *
+ * plan: {
+ *   published: boolean,           // видно участникам (кроме isAdmin)
+ *   regulationDays: [{ date, items: [{ id, time, timeEnd, title, note }] }],
+ *   volunteerDays: [{ date, rows: [{ id, label, shifts: [{ id, from, to, note }] }] }]
+ * }
+ *
+ * draft — черновик в памяти до «Сохранить»; ensure*Days синхронизирует дни с датами карточки.
+ */
 const EventSchedule = {
   eventId: null,
   tab: "regulations",
@@ -10,6 +20,7 @@ const EventSchedule = {
   _regulationTimer: null,
   _ready: false,
 
+  /** Параметры VK при редиректе schedule.html → index.html */
   VK_PARAMS: ["vk_platform", "vk_user_id", "vk_group_id", "vk_app_id", "vk_ref"],
 
   appendVkParams(url) {
@@ -49,6 +60,9 @@ const EventSchedule = {
         if (this.tab === "volunteer") {
           this.syncVolunteerFromDom();
         }
+        if (btn.dataset.tab === "participants" && !isAdmin) {
+          return;
+        }
         this.tab = btn.dataset.tab;
         this.render();
       });
@@ -63,6 +77,7 @@ const EventSchedule = {
     };
   },
 
+  /** Миграция plan.regulations[] → regulationDays[], нормализация полей */
   normalizePlan(input) {
     const plan =
       input?.plan && typeof input.plan === "object"
@@ -171,6 +186,7 @@ const EventSchedule = {
     );
   },
 
+  /** Участник видит расписание только если опубликовано и есть содержимое */
   canView(event) {
     const plan = event?.plan;
     if (!plan || !this.hasContent(plan)) return false;
@@ -210,6 +226,10 @@ const EventSchedule = {
     return true;
   },
 
+  /**
+   * Один объект regulationDays на каждую дату мероприятия.
+   * Старые данные без date подставляются в первый день; лишние даты отбрасываются.
+   */
   ensureRegulationDays(plan, event) {
     const dates = this.getEventDates(event);
 
@@ -260,6 +280,7 @@ const EventSchedule = {
     });
   },
 
+  /** Аналогично regulationDays: по одному volunteerDay на дату, deep clone строк */
   ensureVolunteerDays(plan, event) {
     const dates = this.getEventDates(event);
 
@@ -441,6 +462,9 @@ const EventSchedule = {
   render() {
     const event = this.getEvent();
     if (!event || !this.draft) return;
+    if (this.tab === "participants" && !isAdmin) {
+      this.tab = "regulations";
+    }
 
     document.getElementById("schedulePageTitle").textContent = event.title;
     document.getElementById("schedulePageSubtitle").textContent =
@@ -449,6 +473,9 @@ const EventSchedule = {
         .join(" · ") || "Даты не указаны";
 
     document.querySelectorAll(".schedule-tab").forEach((btn) => {
+      if (btn.dataset.tab === "participants") {
+        btn.classList.toggle("hidden", !isAdmin);
+      }
       const active = btn.dataset.tab === this.tab;
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-selected", active ? "true" : "false");
@@ -468,12 +495,15 @@ const EventSchedule = {
     panel.innerHTML =
       this.tab === "regulations"
         ? this.renderRegulationsPanel(event)
-        : this.renderVolunteerPanel(event);
+        : this.tab === "volunteer"
+          ? this.renderVolunteerPanel(event)
+          : this.renderParticipantsPanel(event);
 
     this.bindPanelActions(event);
     this.scheduleRegulationRefresh();
   },
 
+  /** У участника подсветка «сейчас» в регламенте обновляется раз в минуту */
   scheduleRegulationRefresh() {
     if (this._regulationTimer) {
       clearInterval(this._regulationTimer);
@@ -718,10 +748,46 @@ const EventSchedule = {
         </div>
         ${
           editable && this.volunteerEditOpen
-            ? `<button type="button" class="schedules-add-btn" data-action="add-volunteer-row">+ Участник / роль на ${escapeHtml(formatDate(day.date) || "этот день")}</button>`
+            ? `<p class="schedule-hint">Новые участники добавляются автоматически через кнопку «Перейти в чат» в карточке мероприятия.</p>`
             : ""
         }
         ${day.rows.length ? this.renderScheduleExportBtn("export-volunteer-png", "Скачать смену PNG") : ""}
+      </section>
+    `;
+  },
+
+  renderParticipantsPanel(event) {
+    const list = getEventEnrollments(event.id).sort(
+      (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+    );
+
+    return `
+      <section class="schedule-section">
+        <h3>Участники мероприятия</h3>
+        ${
+          !list.length
+            ? `<p class="schedule-empty">Пока нет заявок. Они появятся после нажатия «Перейти в чат».</p>`
+            : `<div class="participant-list">
+                ${list
+                  .map(
+                    (item) => `
+                    <article class="participant-item" data-enrollment-id="${escapeAttr(item.id)}" data-user-id="${escapeAttr(item.userId)}">
+                      <div class="participant-item__meta">
+                        <strong>ID ${escapeHtml(String(item.userId))}</strong>
+                        <span class="badge enrollment-status enrollment-status--${escapeAttr(getEnrollmentStatusClass(item.status))}">${escapeHtml(getEnrollmentStatusLabel(item.status))}</span>
+                      </div>
+                      <p class="participant-item__date">Обновлено: ${escapeHtml(new Date(item.updatedAt).toLocaleString("ru-RU"))}</p>
+                      <div class="participant-item__actions">
+                        <button type="button" class="secondary-btn" data-action="approve-enrollment" data-enrollment-id="${escapeAttr(item.id)}" ${item.status === "approved" ? "disabled" : ""}>Подтвердить</button>
+                        <button type="button" class="secondary-btn" data-action="reject-enrollment" data-enrollment-id="${escapeAttr(item.id)}" ${item.status === "rejected" ? "disabled" : ""}>Отклонить</button>
+                        <button type="button" class="delete-btn" data-action="delete-enrollment" data-enrollment-id="${escapeAttr(item.id)}">Удалить</button>
+                      </div>
+                    </article>
+                  `
+                  )
+                  .join("")}
+              </div>`
+        }
       </section>
     `;
   },
@@ -872,21 +938,6 @@ const EventSchedule = {
       });
     });
 
-    panel.querySelector("[data-action=add-volunteer-row]")?.addEventListener("click", () => {
-      this.syncVolunteerFromDom();
-      this.volunteerEditOpen = true;
-      const day = this.getSelectedVolunteerDay(event);
-      if (!day) return;
-      const range = this.getDayRange(event, day.date);
-      day.rows.push(
-        this.normalizeVolunteerRow({
-          label: "",
-          shifts: [{ from: range.from, to: range.to }],
-        })
-      );
-      this.render();
-    });
-
     panel.querySelectorAll("[data-action=remove-volunteer-row]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const rowId = btn.dataset.rowId;
@@ -919,6 +970,45 @@ const EventSchedule = {
         const row = day?.rows.find((item) => item.id === btn.dataset.rowId);
         if (!row) return;
         row.shifts = row.shifts.filter((shift) => shift.id !== btn.dataset.shiftId);
+        this.render();
+      });
+    });
+
+    panel.querySelectorAll("[data-action=approve-enrollment]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const enrollmentId = btn.dataset.enrollmentId;
+        const target = enrollments.find((item) => item.id === enrollmentId);
+        if (!target) return;
+        await upsertEnrollment(
+          target.eventId,
+          target.userId,
+          ENROLLMENT_STATUSES.APPROVED,
+          currentUserId || target.userId
+        );
+        this.render();
+      });
+    });
+
+    panel.querySelectorAll("[data-action=reject-enrollment]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const enrollmentId = btn.dataset.enrollmentId;
+        const target = enrollments.find((item) => item.id === enrollmentId);
+        if (!target) return;
+        await upsertEnrollment(
+          target.eventId,
+          target.userId,
+          ENROLLMENT_STATUSES.REJECTED,
+          currentUserId || target.userId
+        );
+        this.render();
+      });
+    });
+
+    panel.querySelectorAll("[data-action=delete-enrollment]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const enrollmentId = btn.dataset.enrollmentId;
+        if (!enrollmentId) return;
+        await removeEnrollmentById(enrollmentId);
         this.render();
       });
     });
@@ -1064,6 +1154,10 @@ const EventSchedule = {
     this.syncVolunteerFromDom();
   },
 
+  /**
+   * publish === true: переключить plan.published (кнопка «Опубликовать»).
+   * Иначе только сохранить черновик в JsonBox через saveEvents().
+   */
   async save(publish) {
     if (!isAdmin || !this.eventId || !this.draft) return;
 
