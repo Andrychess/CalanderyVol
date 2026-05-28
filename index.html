@@ -29,19 +29,28 @@
     <div class="toolbar">
         <input type="search" id="searchInput" class="search-input" placeholder="Поиск по названию..." autocomplete="off">
 
-        <div class="filter-row">
-            <button type="button" class="filter-chip active" data-level="all">Все</button>
-            <button type="button" class="filter-chip" data-level="вузовский">Вузовский</button>
-            <button type="button" class="filter-chip" data-level="городской">Городской</button>
-            <button type="button" class="filter-chip" data-level="региональный">Региональный</button>
-            <button type="button" class="filter-chip" data-level="межрегиональный">Межрегиональный</button>
-            <button type="button" class="filter-chip" data-level="всероссийский">Всероссийский</button>
-            <button type="button" class="filter-chip" data-level="международный">Международный</button>
-        </div>
-
-        <div class="filter-actions">
-            <button type="button" class="toggle-btn" id="favoritesFilterBtn">Избранное</button>
-            <button type="button" class="toggle-btn hidden" id="pastEventsFilterBtn">Прошедшие мероприятия</button>
+        <div class="toolbar-row">
+            <div class="filter-menu" id="eventsFilterMenu">
+                <button type="button" class="filter-menu__trigger" id="eventsFilterBtn" aria-haspopup="true" aria-expanded="false" aria-controls="eventsFilterDropdown">
+                    <span class="filter-menu__icon" aria-hidden="true">⚙</span>
+                    <span id="eventsFilterBtnLabel">Фильтры</span>
+                    <span class="filter-menu__chevron" aria-hidden="true">▾</span>
+                </button>
+                <div class="filter-menu__dropdown hidden" id="eventsFilterDropdown" role="menu" aria-label="Фильтры списка">
+                    <p class="filter-menu__group-title">Уровень</p>
+                    <button type="button" class="filter-menu__item active" role="menuitemradio" data-filter="level" data-value="all" aria-checked="true">Все уровни</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="вузовский" aria-checked="false">Вузовский</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="городской" aria-checked="false">Городской</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="региональный" aria-checked="false">Региональный</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="межрегиональный" aria-checked="false">Межрегиональный</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="всероссийский" aria-checked="false">Всероссийский</button>
+                    <button type="button" class="filter-menu__item" role="menuitemradio" data-filter="level" data-value="международный" aria-checked="false">Международный</button>
+                    <div class="filter-menu__divider" role="separator"></div>
+                    <button type="button" class="filter-menu__item" role="menuitemcheckbox" data-filter="favorites" aria-checked="false">Избранное</button>
+                    <button type="button" class="filter-menu__item hidden" role="menuitemcheckbox" data-filter="past" id="pastEventsFilterOption" aria-checked="false">Прошедшие мероприятия</button>
+                    <button type="button" class="filter-menu__item filter-menu__item--reset" role="menuitem" data-filter="reset">Сбросить фильтры</button>
+                </div>
+            </div>
             <button type="button" class="toggle-btn hidden" id="adminPreviewToggleBtn" aria-pressed="false">Как пользователь</button>
         </div>
     </div>

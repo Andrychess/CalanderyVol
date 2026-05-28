@@ -351,7 +351,10 @@ async function ensureParticipantProfiles(userIds = []) {
     });
   });
 
-  if (isScheduleViewActive() && EventSchedule?.tab === "participants") {
+  if (
+    isScheduleViewActive() &&
+    (EventSchedule?.tab === "participants" || EventSchedule?.tab === "volunteer")
+  ) {
     EventSchedule.render();
   }
 }
@@ -1171,14 +1174,7 @@ function renderCurrentView() {
     updateAdminUi();
   }
 
-  document.getElementById("pastEventsFilterBtn")?.classList.toggle(
-    "active",
-    filterState.showPast
-  );
-  document.getElementById("favoritesFilterBtn")?.classList.toggle(
-    "active",
-    filterState.favoritesOnly
-  );
+  updateEventsFilterUi();
 
   if (viewMode === "calendar") {
     CalendarView.render();
@@ -1658,7 +1654,7 @@ function updateAdminUi() {
     .getElementById("usersRegistryViewBtn")
     ?.classList.toggle("hidden", !isAdmin);
   document
-    .getElementById("pastEventsFilterBtn")
+    .getElementById("pastEventsFilterOption")
     ?.classList.toggle("hidden", !isAdmin);
 
   const deletePastBtn = document.getElementById("deleteAllPastBtn");
@@ -1696,6 +1692,71 @@ function updateAdminUi() {
   updateJsonStorageBadge();
 }
 
+function isEventsFilterMenuOpen() {
+  const dropdown = document.getElementById("eventsFilterDropdown");
+  return dropdown && !dropdown.classList.contains("hidden");
+}
+
+function setEventsFilterMenuOpen(open) {
+  const menu = document.getElementById("eventsFilterMenu");
+  const trigger = document.getElementById("eventsFilterBtn");
+  const dropdown = document.getElementById("eventsFilterDropdown");
+  if (!menu || !trigger || !dropdown) return;
+
+  menu.classList.toggle("filter-menu--open", open);
+  dropdown.classList.toggle("hidden", !open);
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function resetEventsFilters() {
+  filterState.level = "all";
+  filterState.favoritesOnly = false;
+  filterState.showPast = false;
+}
+
+function updateEventsFilterUi() {
+  const trigger = document.getElementById("eventsFilterBtn");
+  const label = document.getElementById("eventsFilterBtnLabel");
+  const dropdown = document.getElementById("eventsFilterDropdown");
+  if (!trigger || !label || !dropdown) return;
+
+  dropdown.querySelectorAll('[data-filter="level"]').forEach((item) => {
+    const active = item.dataset.value === filterState.level;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-checked", active ? "true" : "false");
+  });
+
+  const favoritesItem = dropdown.querySelector('[data-filter="favorites"]');
+  if (favoritesItem) {
+    favoritesItem.classList.toggle("active", filterState.favoritesOnly);
+    favoritesItem.setAttribute(
+      "aria-checked",
+      filterState.favoritesOnly ? "true" : "false"
+    );
+  }
+
+  const pastItem = dropdown.querySelector('[data-filter="past"]');
+  if (pastItem) {
+    pastItem.classList.toggle("active", filterState.showPast);
+    pastItem.setAttribute("aria-checked", filterState.showPast ? "true" : "false");
+    pastItem.classList.toggle("hidden", !isAdmin);
+  }
+
+  const parts = [];
+  if (filterState.level !== "all") {
+    parts.push(formatLevelLabel(filterState.level));
+  }
+  if (filterState.favoritesOnly) {
+    parts.push("Избранное");
+  }
+  if (filterState.showPast) {
+    parts.push("Прошедшие");
+  }
+
+  label.textContent = parts.length ? parts.join(" · ") : "Фильтры";
+  trigger.classList.toggle("filter-menu__trigger--active", parts.length > 0);
+}
+
 function setupFilters() {
   const searchInput = document.getElementById("searchInput");
   searchInput.addEventListener("input", () => {
@@ -1703,25 +1764,49 @@ function setupFilters() {
     renderCurrentView();
   });
 
-  document.querySelectorAll(".filter-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      filterState.level = chip.dataset.level;
-      document.querySelectorAll(".filter-chip").forEach((el) => {
-        el.classList.toggle("active", el === chip);
-      });
-      renderCurrentView();
-    });
+  const menu = document.getElementById("eventsFilterMenu");
+  const trigger = document.getElementById("eventsFilterBtn");
+  const dropdown = document.getElementById("eventsFilterDropdown");
+
+  trigger?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setEventsFilterMenuOpen(!isEventsFilterMenuOpen());
   });
 
-  document.getElementById("favoritesFilterBtn").addEventListener("click", () => {
-    filterState.favoritesOnly = !filterState.favoritesOnly;
+  dropdown?.addEventListener("click", (event) => {
+    const item = event.target.closest(".filter-menu__item");
+    if (!item) return;
+
+    const filterType = item.dataset.filter;
+    if (filterType === "level") {
+      filterState.level = item.dataset.value || "all";
+      setEventsFilterMenuOpen(false);
+    } else if (filterType === "favorites") {
+      filterState.favoritesOnly = !filterState.favoritesOnly;
+    } else if (filterType === "past") {
+      filterState.showPast = !filterState.showPast;
+    } else if (filterType === "reset") {
+      resetEventsFilters();
+      setEventsFilterMenuOpen(false);
+    }
+
+    updateEventsFilterUi();
     renderCurrentView();
   });
 
-  document.getElementById("pastEventsFilterBtn").addEventListener("click", () => {
-    filterState.showPast = !filterState.showPast;
-    renderCurrentView();
+  document.addEventListener("click", (event) => {
+    if (!isEventsFilterMenuOpen()) return;
+    if (menu?.contains(event.target)) return;
+    setEventsFilterMenuOpen(false);
   });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isEventsFilterMenuOpen()) {
+      setEventsFilterMenuOpen(false);
+    }
+  });
+
+  updateEventsFilterUi();
 }
 
 function setupViewSwitch() {
