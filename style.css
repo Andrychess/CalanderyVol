@@ -2184,7 +2184,15 @@ form textarea:focus {
 .participant-actions-bar {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 4px;
+}
+
+.participant-actions-bar .schedule-day-select {
+  max-width: 340px;
+  margin: 0;
 }
 
 .user-registry-card {
@@ -2193,6 +2201,12 @@ form textarea:focus {
   border-radius: var(--radius-md);
   padding: 14px;
   box-shadow: var(--shadow-sm);
+  margin-bottom: 10px;
+}
+
+.user-registry-toolbar {
+  display: flex;
+  justify-content: flex-end;
   margin-bottom: 10px;
 }
 

@@ -132,6 +132,24 @@ function normalizeEnrollment(raw = {}) {
   };
 }
 
+function dedupeEnrollments(list = []) {
+  const byKey = new Map();
+  list.forEach((raw) => {
+    const item = normalizeEnrollment(raw);
+    if (!item.eventId || !item.userId) return;
+    const key = getEnrollmentKey(item.eventId, item.userId);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, item);
+      return;
+    }
+    if (new Date(item.updatedAt).getTime() >= new Date(existing.updatedAt).getTime()) {
+      byKey.set(key, item);
+    }
+  });
+  return [...byKey.values()];
+}
+
 /** Старые подписи уровней до перехода на вузовский/городской/… */
 function mapLegacyLevel(level) {
   const map = {
@@ -559,9 +577,7 @@ async function loadEvents() {
   try {
     const payload = await JsonBoxStorage.getAppData();
     events = payload.events.map(normalizeEvent);
-    enrollments = payload.enrollments
-      .map(normalizeEnrollment)
-      .filter((item) => item.eventId && item.userId);
+    enrollments = dedupeEnrollments(payload.enrollments);
     if (container) {
       renderCurrentView();
     }
@@ -576,6 +592,7 @@ async function loadEvents() {
 }
 
 async function saveEvents() {
+  enrollments = dedupeEnrollments(enrollments);
   await JsonBoxStorage.saveAppData({
     events,
     enrollments,
@@ -589,9 +606,7 @@ async function reloadEventsFromStorage() {
   const byId = new Map();
   loaded.forEach((item) => byId.set(item.id, item));
   events = [...byId.values()];
-  enrollments = payload.enrollments
-    .map(normalizeEnrollment)
-    .filter((item) => item.eventId && item.userId);
+  enrollments = dedupeEnrollments(payload.enrollments);
 }
 
 function generateEventId() {
@@ -1097,23 +1112,44 @@ function renderUsersRegistry() {
     return;
   }
 
-  container.innerHTML = items
-    .map((item) => {
-      const eventsCount = item.events.size;
-      return `
-        <article class="user-registry-card">
-          <h3 class="user-registry-card__name">${escapeHtml(getUserDisplayName(item.userId))}</h3>
-          <p class="user-registry-card__id">ID: ${escapeHtml(String(item.userId))}</p>
-          <div class="user-registry-card__stats">
-            <span class="badge enrollment-status enrollment-status--pending">Ожидает: ${item.pending}</span>
-            <span class="badge enrollment-status enrollment-status--approved">Подтверждено: ${item.approved}</span>
-            <span class="badge enrollment-status enrollment-status--rejected">Отклонено: ${item.rejected}</span>
-          </div>
-          <p class="user-registry-card__events">Мероприятий: ${eventsCount}</p>
-        </article>
-      `;
-    })
-    .join("");
+  container.innerHTML = `
+    <div class="user-registry-toolbar">
+      <button type="button" class="delete-btn" data-action="clear-users-registry">Очистить список пользователей</button>
+    </div>
+    ${items
+      .map((item) => {
+        const eventsCount = item.events.size;
+        return `
+          <article class="user-registry-card">
+            <h3 class="user-registry-card__name">${escapeHtml(getUserDisplayName(item.userId))}</h3>
+            <p class="user-registry-card__id">ID: ${escapeHtml(String(item.userId))}</p>
+            <div class="user-registry-card__stats">
+              <span class="badge enrollment-status enrollment-status--pending">Ожидает: ${item.pending}</span>
+              <span class="badge enrollment-status enrollment-status--approved">Подтверждено: ${item.approved}</span>
+              <span class="badge enrollment-status enrollment-status--rejected">Отклонено: ${item.rejected}</span>
+            </div>
+            <p class="user-registry-card__events">Мероприятий: ${eventsCount}</p>
+          </article>
+        `;
+      })
+      .join("")}
+  `;
+
+  container
+    .querySelector("[data-action=clear-users-registry]")
+    ?.addEventListener("click", async () => {
+      const confirmed = confirm(
+        "Очистить список пользователей? Это удалит все заявки (enrollments)."
+      );
+      if (!confirmed) return;
+
+      enrollments = [];
+      participantProfiles.clear();
+      await saveEvents();
+      await reloadEventsFromStorage();
+      renderUsersRegistry();
+      renderCurrentView();
+    });
 }
 
 function scrollToEventFromUrl() {

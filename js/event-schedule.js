@@ -154,6 +154,7 @@ const EventSchedule = {
       : [];
     return {
       id: String(raw.id || generateEventId()),
+      userId: Number(raw.userId) || null,
       label: String(raw.label || "").trim(),
       shifts: shifts.filter((shift) => shift.from && shift.to),
     };
@@ -710,6 +711,10 @@ const EventSchedule = {
     const editable = isAdmin;
     const days = this.draft.volunteerDays || [];
     const day = this.getSelectedVolunteerDay(event) || { date: "", rows: [] };
+    if (typeof ensureParticipantProfiles === "function") {
+      const linkedIds = getEventEnrollments(event.id).map((item) => item.userId);
+      ensureParticipantProfiles(linkedIds);
+    }
     const dayTabs = this.renderVolunteerDayTabs(days, day.date, event);
     const range = this.getDayRange(event, day.date);
     const hours = this.buildHourMarks(range.from, range.to);
@@ -750,11 +755,47 @@ const EventSchedule = {
         </div>
         ${
           editable && this.volunteerEditOpen
-            ? `<p class="schedule-hint">Новые участники добавляются автоматически через кнопку «Перейти в чат» в карточке мероприятия.</p>`
+            ? `
+              ${this.renderVolunteerAssigneeControls(event, day)}
+              <p class="schedule-hint">Новые участники добавляются автоматически через кнопку «Перейти в чат» в карточке мероприятия.</p>
+            `
             : ""
         }
         ${day.rows.length ? this.renderScheduleExportBtn("export-volunteer-png", "Скачать смену PNG") : ""}
       </section>
+    `;
+  },
+
+  getAssignableParticipants(event, day) {
+    const linked = getEventEnrollments(event.id)
+      .filter((item) => item.status !== ENROLLMENT_STATUSES.REJECTED)
+      .map((item) => Number(item.userId))
+      .filter((id) => id > 0);
+    const unique = [...new Set(linked)];
+    const used = new Set(
+      (day.rows || []).map((row) => Number(row.userId)).filter((id) => id > 0)
+    );
+    return unique.filter((userId) => !used.has(userId));
+  },
+
+  renderVolunteerAssigneeControls(event, day) {
+    const available = this.getAssignableParticipants(event, day);
+    if (!available.length) {
+      return `<p class="schedule-hint">Нет доступных пользователей для добавления в смену.</p>`;
+    }
+
+    return `
+      <div class="participant-actions-bar">
+        <select class="schedule-day-select" data-role="volunteer-enrollment-user">
+          ${available
+            .map(
+              (userId) =>
+                `<option value="${escapeAttr(String(userId))}">${escapeHtml(getUserDisplayName(userId))}</option>`
+            )
+            .join("")}
+        </select>
+        <button type="button" class="secondary-btn" data-action="add-volunteer-from-enrollment">Добавить в смену</button>
+      </div>
     `;
   },
 
@@ -940,6 +981,33 @@ const EventSchedule = {
       this.volunteerEditOpen = !this.volunteerEditOpen;
       this.render();
     });
+
+    panel
+      .querySelector("[data-action=add-volunteer-from-enrollment]")
+      ?.addEventListener("click", () => {
+        this.syncVolunteerFromDom();
+        this.volunteerEditOpen = true;
+        const day = this.getSelectedVolunteerDay(event);
+        if (!day) return;
+
+        const select = panel.querySelector("[data-role=volunteer-enrollment-user]");
+        const userId = Number(select?.value);
+        if (!userId) return;
+        if ((day.rows || []).some((row) => Number(row.userId) === userId)) {
+          alert("Этот пользователь уже добавлен в смену на выбранный день.");
+          return;
+        }
+
+        const range = this.getDayRange(event, day.date);
+        day.rows.push(
+          this.normalizeVolunteerRow({
+            userId,
+            label: getUserDisplayName(userId),
+            shifts: [{ from: range.from, to: range.to }],
+          })
+        );
+        this.render();
+      });
 
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
       this.syncRegulationsFromDom();
