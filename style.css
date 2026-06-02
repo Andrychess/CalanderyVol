@@ -230,10 +230,60 @@ body.app-shell {
   margin-bottom: 10px;
 }
 
-.attended-points__note {
+.attended-points__note,
+.attended-points__extra {
   font-size: 0.75rem;
   line-height: 1.45;
   color: var(--text-muted);
+}
+
+.attended-points__extra {
+  margin-top: 8px;
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 2000;
+  max-width: min(92vw, 420px);
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.app-toast--success {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app-toast--error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.app-toast--info {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.volunteer-bulk-add {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.user-registry-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 /* ── View switch ── */
@@ -276,6 +326,38 @@ body.app-shell {
 /* ── Toolbar ── */
 .toolbar {
   margin-bottom: 14px;
+}
+
+.search-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.search-wrap .search-input {
+  margin-bottom: 0;
+  padding-right: 42px;
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.toolbar-summary {
+  margin: 0 0 10px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 
 .search-input {
@@ -2354,12 +2436,6 @@ form textarea:focus {
   border-radius: var(--radius-md);
   padding: 14px;
   box-shadow: var(--shadow-sm);
-  margin-bottom: 10px;
-}
-
-.user-registry-toolbar {
-  display: flex;
-  justify-content: flex-end;
   margin-bottom: 10px;
 }
 

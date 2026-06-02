@@ -215,6 +215,15 @@ const EventSchedule = {
     this.volunteerDayDate = null;
     this.participantDecisions = new Map();
     this.draft = structuredClone(event.plan || this.emptyPlan());
+    const localDraft = this.readLocalDraft(eventId);
+    if (localDraft && isAdmin) {
+      const restore = confirm("Восстановить несохранённый черновик расписания?");
+      if (restore) {
+        this.draft = structuredClone(localDraft);
+      } else {
+        this.clearLocalDraft(eventId);
+      }
+    }
     this.ensureRegulationDays(this.draft, event);
     this.ensureVolunteerDays(this.draft, event);
     this.regulationDayDate = this.getDefaultRegulationDate(
@@ -843,8 +852,43 @@ const EventSchedule = {
             )
             .join("")}
         </div>
+        <button type="button" class="secondary-btn volunteer-bulk-add" data-action="add-all-approved-volunteers">Добавить всех подтверждённых</button>
       </div>
     `;
+  },
+
+  getApprovedAssignableParticipants(event, day) {
+    const used = new Set(
+      (day.rows || []).map((row) => Number(row.userId)).filter((id) => id > 0)
+    );
+    return getEventEnrollments(event.id)
+      .filter((item) => item.status === ENROLLMENT_STATUSES.APPROVED)
+      .map((item) => Number(item.userId))
+      .filter((userId) => userId > 0 && !used.has(userId));
+  },
+
+  addAllApprovedVolunteers(event) {
+    const day = this.getSelectedVolunteerDay(event);
+    if (!day) return 0;
+    const userIds = [...new Set(this.getApprovedAssignableParticipants(event, day))];
+    if (!userIds.length) {
+      notifyInfo("Нет подтверждённых участников для добавления");
+      return 0;
+    }
+    const range = this.getDayRange(event, day.date);
+    userIds.forEach((userId) => {
+      day.rows.push(
+        this.normalizeVolunteerRow({
+          userId,
+          label: getUserDisplayName(userId),
+          shifts: [{ from: range.from, to: range.to }],
+        })
+      );
+    });
+    this.volunteerEditOpen = true;
+    this.persistLocalDraft();
+    notifySuccess(`Добавлено в смену: ${userIds.length}. Нажмите «Сохранить».`);
+    return userIds.length;
   },
 
   addVolunteerFromEnrollment(event, userId) {
@@ -852,7 +896,7 @@ const EventSchedule = {
     if (!day || !userId) return false;
 
     if ((day.rows || []).some((row) => Number(row.userId) === userId)) {
-      alert("Этот пользователь уже добавлен в смену на выбранный день.");
+      notifyInfo("Этот пользователь уже добавлен в смену на выбранный день.");
       return false;
     }
 
@@ -865,7 +909,41 @@ const EventSchedule = {
       })
     );
     this.volunteerEditOpen = true;
+    this.persistLocalDraft();
+    notifyInfo("Участник добавлен. Не забудьте нажать «Сохранить».");
     return true;
+  },
+
+  getLocalDraftStorageKey(eventId) {
+    return `cal_schedule_draft_${String(eventId)}`;
+  },
+
+  persistLocalDraft() {
+    if (!this.eventId || !this.draft) return;
+    try {
+      localStorage.setItem(
+        this.getLocalDraftStorageKey(this.eventId),
+        JSON.stringify({ draft: this.draft, savedAt: Date.now() })
+      );
+    } catch {
+      /* quota */
+    }
+  },
+
+  readLocalDraft(eventId) {
+    try {
+      const raw = localStorage.getItem(this.getLocalDraftStorageKey(eventId));
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed?.draft || null;
+    } catch {
+      return null;
+    }
+  },
+
+  clearLocalDraft(eventId = this.eventId) {
+    if (!eventId) return;
+    localStorage.removeItem(this.getLocalDraftStorageKey(eventId));
   },
 
   renderParticipantsPanel(event) {
@@ -1074,6 +1152,15 @@ const EventSchedule = {
       });
     });
 
+    panel
+      .querySelector("[data-action=add-all-approved-volunteers]")
+      ?.addEventListener("click", () => {
+        this.syncVolunteerFromDom();
+        if (this.addAllApprovedVolunteers(event)) {
+          this.render();
+        }
+      });
+
     panel.querySelector("[data-action=add-regulation]")?.addEventListener("click", () => {
       this.syncRegulationsFromDom();
       const day = this.getSelectedRegulationDay(event);
@@ -1157,7 +1244,7 @@ const EventSchedule = {
           .map(([enrollmentId, action]) => ({ enrollmentId, action }));
 
         if (!decisions.length) {
-          alert("Выберите действия для заявок и затем примените изменения.");
+          notifyInfo("Выберите действия для заявок и затем примените изменения.");
           return;
         }
 
@@ -1172,10 +1259,11 @@ const EventSchedule = {
           this.participantDecisions = new Map();
           this.render();
           if (changed > 0) {
+            notifySuccess(`Обновлено заявок: ${changed}. Участник увидит статус при следующем входе.`);
             renderCurrentView();
           }
         } catch (error) {
-          alert(error.message || "Не удалось применить изменения");
+          notifyError(error.message || "Не удалось применить изменения");
         } finally {
           btn.disabled = false;
           btn.textContent = originalText;
@@ -1214,7 +1302,7 @@ const EventSchedule = {
     try {
       await exportFn();
     } catch (error) {
-      alert(error.message || "Не удалось создать PNG");
+      notifyError(error.message || "Не удалось создать PNG");
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;
@@ -1232,7 +1320,7 @@ const EventSchedule = {
     );
 
     if (!items.length) {
-      alert("Нет пунктов регламента для экспорта на выбранный день");
+      notifyInfo("Нет пунктов регламента для экспорта на выбранный день");
       return;
     }
 
@@ -1246,7 +1334,7 @@ const EventSchedule = {
 
     const day = this.getSelectedVolunteerDay(event);
     if (!day?.rows?.length) {
-      alert("Нет данных волонтерской смены для экспорта");
+      notifyInfo("Нет данных волонтерской смены для экспорта");
       return;
     }
 
@@ -1322,6 +1410,7 @@ const EventSchedule = {
   syncDraftFromDom() {
     this.syncRegulationsFromDom();
     this.syncVolunteerFromDom();
+    this.persistLocalDraft();
   },
 
   /**
@@ -1341,7 +1430,7 @@ const EventSchedule = {
 
     if (publish) {
       if (!this.draft.published && !this.hasContent(this.draft)) {
-        alert(
+        notifyInfo(
           "Добавьте содержимое расписания перед публикацией (регламент необязателен)."
         );
         return;
@@ -1395,13 +1484,33 @@ const EventSchedule = {
           ? "Расписание опубликовано"
           : "Расписание скрыто от участников"
         : "Расписание сохранено";
-      alert(msg);
+      this.clearLocalDraft(this.eventId);
+      notifySuccess(msg);
     } catch (error) {
-      alert(error.message || "Не удалось сохранить расписание");
+      notifyError(error.message || "Не удалось сохранить расписание");
     }
   },
 
   getDayRange(event, date) {
+    const regDay = this.draft?.regulationDays?.find((item) => item.date === date);
+    const regItems = regDay?.items || [];
+    if (regItems.length) {
+      const minuteValues = [];
+      regItems.forEach((item) => {
+        if (item.time) minuteValues.push(this.timeToMinutes(item.time));
+        if (item.timeEnd) minuteValues.push(this.timeToMinutes(item.timeEnd));
+      });
+      const valid = minuteValues.filter((value) => Number.isFinite(value));
+      if (valid.length) {
+        let from = this.minutesToTime(Math.min(...valid));
+        let to = this.minutesToTime(Math.max(...valid));
+        if (this.timeToMinutes(from) >= this.timeToMinutes(to)) {
+          to = this.minutesToTime(this.timeToMinutes(from) + 60);
+        }
+        return { from, to };
+      }
+    }
+
     const eventDay = getEventSchedules(event).find((item) => item.date === date);
     if (!eventDay) {
       return { from: "08:00", to: "20:00" };

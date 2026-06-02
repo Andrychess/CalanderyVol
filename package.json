@@ -1,0 +1,8 @@
+{
+  "name": "calandaryvol",
+  "private": true,
+  "scripts": {
+    "test": "node tests/app-data.test.mjs",
+    "check": "node --check script.js && node --check js/event-schedule.js && node --check js/app-data.js"
+  }
+}

@@ -9,22 +9,12 @@
  */
 const EVENT_LEVELS = LevelColors.order;
 
-/** Оценочные баллы за прошедшее мероприятие по уровню (для ознакомления) */
-const EVENT_LEVEL_POINTS = {
-  вузовский: 100,
-  городской: 100,
-  региональный: 500,
-  всероссийский: 700,
-  международный: 800,
-};
+function getFormDefaults() {
+  return AppData.getFormDefaults();
+}
 
-const DEFAULT_LOCATION = "ЮРГПУ(НПИ)";
-const DEFAULT_BUTTON_LABEL =
-  "Подтвердить участие (перейти в информационный чат)";
-const DEFAULT_FUNCTIONALITY =
-  "Сопровождение концертного зала\nОрганизация работы гардероба";
-const DEFAULT_CONDITIONS =
-  "освобождение от занятий на время проведения мероприятия;\nбаллы для повышенной стипендии;\nверифицированные часы на платформе";
+let lastRemoteFingerprint = "";
+let eventFormDraftTimer = null;
 
 let events = [];
 let enrollments = [];
@@ -142,7 +132,7 @@ function normalizeEvent(raw) {
     date: first.date,
     time: first.time,
     timeEnd: first.timeEnd,
-    location: raw.location || DEFAULT_LOCATION,
+    location: raw.location || getFormDefaults().location,
     level: EVENT_LEVELS.includes(raw.level)
       ? raw.level
       : mapLegacyLevel(raw.level),
@@ -150,7 +140,7 @@ function normalizeEvent(raw) {
     functionality,
     conditions,
     description: raw.description || "",
-    buttonLabel: raw.buttonLabel || DEFAULT_BUTTON_LABEL,
+    buttonLabel: raw.buttonLabel || getFormDefaults().buttonLabel,
     buttonUrl: raw.buttonUrl || raw.link || "",
     plan: raw?.plan ? EventSchedule.normalizePlan(raw.plan) : EventSchedule.emptyPlan(),
   };
@@ -242,7 +232,7 @@ function resolveEventLevelKey(level) {
 }
 
 function getEventLevelPoints(level) {
-  return EVENT_LEVEL_POINTS[resolveEventLevelKey(level)] ?? 0;
+  return AppData.EVENT_LEVEL_POINTS[resolveEventLevelKey(level)] ?? 0;
 }
 
 function sumEventsLevelPoints(eventList) {
@@ -260,14 +250,27 @@ function formatAttendedEventsCountLabel(count) {
   return `${count} ${word}`;
 }
 
-/** Мероприятия из вкладки «Посещённые» — те же, к которым пользователь присоединился */
-function getMyAttendedEventsFromRecords(records) {
-  return records
-    .map((record) => findEventById(events, record.eventId))
-    .filter(Boolean);
+/** Подтверждённые прошедшие мероприятия для подсчёта баллов */
+function getMyApprovedPastEventsForPoints() {
+  const seen = new Set();
+  const result = [];
+
+  getMyEnrollmentRecords()
+    .filter((record) => record.status === ENROLLMENT_STATUSES.APPROVED)
+    .forEach((record) => {
+      const eventId = String(record.eventId);
+      if (seen.has(eventId)) return;
+      const event = findEventById(events, record.eventId);
+      if (!event || !isEventPast(event)) return;
+      seen.add(eventId);
+      result.push(event);
+    });
+
+  return result;
 }
 
-function renderAttendedPointsSummary(eventList) {
+function renderAttendedPointsSummary(eventList, options = {}) {
+  const { pendingCount = 0, upcomingCount = 0 } = options;
   const total = sumEventsLevelPoints(eventList);
   const count = eventList.length;
   const countLabel = formatAttendedEventsCountLabel(count);
@@ -275,10 +278,124 @@ function renderAttendedPointsSummary(eventList) {
   return `
     <section class="attended-points" aria-label="Оценка баллов за посещённые мероприятия">
       <p class="attended-points__total">≈ <strong>${escapeHtml(formatPoints(total))}</strong> баллов</p>
-      <p class="attended-points__meta">По ${escapeHtml(countLabel)}</p>
-      <p class="attended-points__note">Баллы приблизительные и служат только для ознакомления.</p>
+      <p class="attended-points__meta">По ${escapeHtml(countLabel)} с подтверждённым участием</p>
+      <p class="attended-points__note">Учитываются только прошедшие мероприятия со статусом «Подтверждено». Баллы приблизительные и служат только для ознакомления.</p>
+      ${
+        pendingCount || upcomingCount
+          ? `<p class="attended-points__extra">Не в сумме: ${pendingCount ? `ожидают подтверждения — ${pendingCount}` : ""}${pendingCount && upcomingCount ? "; " : ""}${upcomingCount ? `ещё не завершились — ${upcomingCount}` : ""}.</p>`
+          : ""
+      }
     </section>
   `;
+}
+
+function updateEventsFilterSummary() {
+  const el = document.getElementById("eventsFilterSummary");
+  if (!el) return;
+
+  if (viewMode !== "list" && viewMode !== "calendar") {
+    el.classList.add("hidden");
+    return;
+  }
+
+  const total = getFilteredEvents().length;
+  const allCount =
+    viewMode === "calendar"
+      ? events.filter((event) =>
+          isAdmin && filterState.showPast ? isEventPast(event) : !isEventPast(event)
+        ).length
+      : events.length;
+
+  el.textContent =
+    filterState.search.trim() || filterState.level !== "all" || filterState.favoritesOnly
+      ? `Найдено: ${total}`
+      : isAdmin && filterState.showPast
+        ? `В архиве: ${total}`
+        : `Мероприятий: ${total}`;
+  el.classList.remove("hidden");
+}
+
+function fingerprintAppData(data) {
+  return AppData.fingerprint(data);
+}
+
+function downloadAppDataBackup() {
+  const payload = { events, enrollments };
+  AppData.downloadTextFile(
+    `calandary-backup-${getTodayDateString()}.json`,
+    JSON.stringify(payload, null, 2),
+    "application/json;charset=utf-8"
+  );
+  notifySuccess("Резервная копия JSON скачана");
+}
+
+function exportEnrollmentsCsv() {
+  const rows = [...enrollments].sort(
+    (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)
+  );
+  const csv = AppData.buildEnrollmentsCsv(
+    rows,
+    (eventId) => findEventById(events, eventId)?.title || eventId,
+    (userId) => getUserDisplayName(userId)
+  );
+  AppData.downloadTextFile(
+    `enrollments-${getTodayDateString()}.csv`,
+    csv,
+    "text/csv;charset=utf-8"
+  );
+  notifySuccess("CSV с заявками скачан");
+}
+
+async function cleanupOrphanEnrollmentsAction() {
+  const before = enrollments.length;
+  enrollments = AppData.cleanupOrphanEnrollments(enrollments, events);
+  const removed = before - enrollments.length;
+  if (!removed) {
+    notifyInfo("Сиротских заявок не найдено");
+    return;
+  }
+  await saveEvents();
+  await reloadEventsFromStorage();
+  renderUsersRegistry();
+  renderCurrentView();
+  notifySuccess(`Удалено заявок без мероприятия: ${removed}`);
+}
+
+async function cleanupOldEnrollmentsAction() {
+  const confirmed = confirm(
+    "Удалить заявки старше 6 месяцев? Действие нельзя отменить."
+  );
+  if (!confirmed) return;
+
+  const before = enrollments.length;
+  enrollments = AppData.cleanupOldEnrollments(enrollments, 6);
+  const removed = before - enrollments.length;
+  if (!removed) {
+    notifyInfo("Старых заявок не найдено");
+    return;
+  }
+  await saveEvents();
+  await reloadEventsFromStorage();
+  renderUsersRegistry();
+  renderCurrentView();
+  notifySuccess(`Удалено старых заявок: ${removed}`);
+}
+
+function duplicateEvent(eventId) {
+  const source = findEventById(events, eventId);
+  if (!source || isEventArchived(source)) return;
+
+  const copy = normalizeEvent({
+    ...source,
+    id: generateEventId(),
+    title: `${source.title} (копия)`,
+    plan: source.plan ? structuredClone(source.plan) : EventSchedule.emptyPlan(),
+    archived: false,
+  });
+
+  events = [copy, ...events];
+  notifySuccess("Копия создана — откройте «Изменить» и сохраните");
+  renderCurrentView();
 }
 
 function getEventSchedules(event) {
@@ -461,7 +578,7 @@ function readSchedulesFromForm() {
 // --- Кнопки на карточке ---
 
 function renderJoinButton(event) {
-  const label = escapeHtml(event.buttonLabel || DEFAULT_BUTTON_LABEL);
+  const label = escapeHtml(event.buttonLabel || getFormDefaults().buttonLabel);
   const url = VkAuth.normalizeLink(event.buttonUrl);
 
   if (!url) {
@@ -578,7 +695,7 @@ function buildEventExportStoryElement(event) {
       <p class="png-export-story__eyebrow">Мероприятие</p>
       <h1 class="png-export-story__title">${escapeHtml(event.title)}</h1>
       <div class="png-export-story__when">${renderExportSchedules(event)}</div>
-      <p class="png-export-story__location">📍 ${escapeHtml(event.location || DEFAULT_LOCATION)}</p>
+      <p class="png-export-story__location">📍 ${escapeHtml(event.location || getFormDefaults().location)}</p>
     </header>
     <main class="png-export-story__main">
       <div class="png-export-story__badges">
@@ -727,6 +844,7 @@ async function loadEvents() {
     const payload = await JsonBoxStorage.getAppData();
     events = payload.events.map(normalizeEvent);
     enrollments = dedupeEnrollments(payload.enrollments);
+    lastRemoteFingerprint = fingerprintAppData({ events, enrollments });
     if (trimPastEventsData()) {
       try {
         await JsonBoxStorage.saveAppData({ events, enrollments });
@@ -748,13 +866,31 @@ async function loadEvents() {
   }
 }
 
-async function saveEvents() {
+async function saveEvents(options = {}) {
+  const { skipConflictCheck = false } = options;
   enrollments = dedupeEnrollments(enrollments);
   trimPastEventsData();
+
+  if (!skipConflictCheck && lastRemoteFingerprint) {
+    const remote = await JsonBoxStorage.getAppData();
+    const remoteFp = fingerprintAppData(remote);
+    if (remoteFp !== lastRemoteFingerprint) {
+      const proceed = confirm(
+        "Данные на сервере изменились (другая вкладка или администратор). Всё равно сохранить вашу версию?"
+      );
+      if (!proceed) {
+        await reloadEventsFromStorage();
+        renderCurrentView();
+        throw new Error("Сохранение отменено — загружены данные с сервера");
+      }
+    }
+  }
+
   await JsonBoxStorage.saveAppData({
     events,
     enrollments,
   });
+  lastRemoteFingerprint = fingerprintAppData({ events, enrollments });
   updateJsonStorageBadge();
 }
 
@@ -767,6 +903,7 @@ async function reloadEventsFromStorage() {
   events = [...byId.values()];
   enrollments = dedupeEnrollments(payload.enrollments);
   trimPastEventsData();
+  lastRemoteFingerprint = fingerprintAppData({ events, enrollments });
   updateJsonStorageBadge();
 }
 
@@ -934,6 +1071,7 @@ function renderEventCard(event, options = {}) {
         !viewOnly && isAdmin
           ? `<div class="edit-buttons no-export">
               <button type="button" class="edit-btn" data-action="edit" data-id="${escapeHtml(event.id)}">Изменить</button>
+              <button type="button" class="secondary-btn" data-action="duplicate" data-id="${escapeHtml(event.id)}">Копировать</button>
               <button type="button" class="delete-btn" data-action="delete" data-id="${escapeHtml(event.id)}">Удалить</button>
               <button type="button" class="secondary-btn" data-action="export-png" data-id="${escapeHtml(event.id)}" data-title="${escapeHtml(event.title)}">Скачать PNG 9:16</button>
             </div>`
@@ -1063,7 +1201,7 @@ function bindEventCardActions(container) {
         const event = findEventById(events, btn.dataset.id);
         await CardPngExport.exportCard(event);
       } catch (error) {
-        alert(error.message || "Не удалось скачать PNG");
+        notifyError(error.message || "Не удалось скачать PNG");
       } finally {
         btn.disabled = false;
         btn.textContent = originalText;
@@ -1111,6 +1249,18 @@ function bindEventCardActions(container) {
   if (isAdmin) {
     container.querySelectorAll("[data-action=edit]").forEach((btn) => {
       btn.addEventListener("click", () => openEditModal(btn.dataset.id));
+    });
+    container.querySelectorAll("[data-action=duplicate]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        duplicateEvent(btn.dataset.id);
+        try {
+          await saveEvents();
+          await reloadEventsFromStorage();
+          renderCurrentView();
+        } catch (error) {
+          notifyError(error.message || "Не удалось сохранить копию");
+        }
+      });
     });
     container.querySelectorAll("[data-action=delete]").forEach((btn) => {
       btn.addEventListener("click", () => deleteEvent(btn.dataset.id));
@@ -1179,6 +1329,8 @@ function renderCurrentView() {
   }
 
   updateEventsFilterUi();
+  updateEventsFilterSummary();
+  updateSearchClearButton();
 
   if (viewMode === "calendar") {
     CalendarView.render();
@@ -1234,7 +1386,11 @@ function renderAttendedEvents() {
     return;
   }
 
-  const cards = myRecords
+  const visibleRecords = myRecords.filter(
+    (record) => record.status !== ENROLLMENT_STATUSES.REJECTED
+  );
+
+  const cards = visibleRecords
     .map((record) => {
       const event = findEventById(events, record.eventId);
       if (!event) return "";
@@ -1245,6 +1401,7 @@ function renderAttendedEvents() {
           <div class="attended-mini-card__meta">
             <span>${escapeHtml(formatDate(firstSchedule?.date || "") || "Дата не указана")}</span>
             <span>${escapeHtml(formatLevelLabel(event.level) || "Уровень не указан")}</span>
+            <span class="badge enrollment-status enrollment-status--${escapeAttr(getEnrollmentStatusClass(record.status))}">${escapeHtml(getEnrollmentStatusLabel(record.status))}</span>
           </div>
         </article>
       `;
@@ -1252,11 +1409,18 @@ function renderAttendedEvents() {
     .filter(Boolean)
     .join("");
 
-  const attendedForPoints = getMyAttendedEventsFromRecords(myRecords);
+  const pointsEvents = getMyApprovedPastEventsForPoints();
+  const pendingCount = visibleRecords.filter(
+    (record) => record.status === ENROLLMENT_STATUSES.PENDING
+  ).length;
+  const upcomingCount = visibleRecords.filter((record) => {
+    const event = findEventById(events, record.eventId);
+    return event && !isEventPast(event);
+  }).length;
 
   container.innerHTML =
     (cards || `<div class="empty-state"><h2>Нет доступных карточек</h2></div>`) +
-    renderAttendedPointsSummary(attendedForPoints);
+    renderAttendedPointsSummary(pointsEvents, { pendingCount, upcomingCount });
 }
 
 function buildUsersRegistryItems() {
@@ -1306,7 +1470,9 @@ function renderUsersRegistry() {
 
   container.innerHTML = `
     <div class="user-registry-toolbar">
-      <button type="button" class="delete-btn" data-action="clear-users-registry">Очистить список пользователей</button>
+      <button type="button" class="secondary-btn" data-action="cleanup-orphan-enrollments">Удалить заявки без мероприятия</button>
+      <button type="button" class="secondary-btn" data-action="cleanup-old-enrollments">Удалить заявки старше 6 мес.</button>
+      <button type="button" class="delete-btn" data-action="clear-users-registry">Очистить все заявки</button>
     </div>
     ${items
       .map((item) => {
@@ -1326,6 +1492,13 @@ function renderUsersRegistry() {
       })
       .join("")}
   `;
+
+  container
+    .querySelector("[data-action=cleanup-orphan-enrollments]")
+    ?.addEventListener("click", cleanupOrphanEnrollmentsAction);
+  container
+    .querySelector("[data-action=cleanup-old-enrollments]")
+    ?.addEventListener("click", cleanupOldEnrollmentsAction);
 
   container
     .querySelector("[data-action=clear-users-registry]")
@@ -1363,18 +1536,47 @@ function scrollToEventFromUrl() {
   }
 }
 
+function scheduleEventFormDraftSave() {
+  if (editingEventId) return;
+  if (eventFormDraftTimer) clearTimeout(eventFormDraftTimer);
+  eventFormDraftTimer = setTimeout(() => {
+    EventFormDraft.write(EventFormDraft.collectFromDom());
+  }, 500);
+}
+
+function bindEventFormDraftAutosave() {
+  const form = document.getElementById("eventForm");
+  if (!form || form.dataset.draftBound === "1") return;
+  form.dataset.draftBound = "1";
+  form.addEventListener("input", scheduleEventFormDraftSave);
+  form.addEventListener("change", scheduleEventFormDraftSave);
+}
+
 function openAddModal() {
   editingEventId = null;
+  const defaults = getFormDefaults();
   document.getElementById("modalTitle").textContent = "Новое мероприятие";
   document.getElementById("eventForm").reset();
   document.getElementById("eventId").value = "";
-  document.getElementById("eventButtonLabel").value = DEFAULT_BUTTON_LABEL;
+  document.getElementById("eventButtonLabel").value = defaults.buttonLabel;
   document.getElementById("eventLevel").value = "региональный";
-  document.getElementById("eventLocation").value = DEFAULT_LOCATION;
+  document.getElementById("eventLocation").value = defaults.location;
   document.getElementById("eventEnrollment").value = "open";
-  document.getElementById("eventFunctionality").value = DEFAULT_FUNCTIONALITY;
-  document.getElementById("eventConditions").value = DEFAULT_CONDITIONS;
+  document.getElementById("eventFunctionality").value = defaults.functionality;
+  document.getElementById("eventConditions").value = defaults.conditions;
   renderScheduleForm([{ date: getTodayDateString(), time: "", timeEnd: "" }]);
+
+  const draft = EventFormDraft.read();
+  if (draft?.title || draft?.buttonUrl) {
+    const restore = confirm("Восстановить несохранённый черновик формы?");
+    if (restore) {
+      EventFormDraft.applyToDom(draft);
+    } else {
+      EventFormDraft.clear();
+    }
+  }
+
+  bindEventFormDraftAutosave();
   setFormError("");
   showModal(true);
 }
@@ -1384,8 +1586,8 @@ function openEditModal(eventId) {
   if (!event) return;
 
   if (isEventArchived(event)) {
-    alert(
-      "Архивная запись: полные данные удалены для экономии места. Доступно только удаление карточки."
+    notifyInfo(
+      "Архивная запись: полные данные удалены. Доступно только удаление карточки."
     );
     return;
   }
@@ -1460,6 +1662,13 @@ async function handleFormSubmit(event) {
       return;
     }
 
+    if (!AppData.isAllowedChatUrl(eventData.buttonUrl)) {
+      setFormError(
+        "Ссылка должна вести на VK или Telegram (vk.me, vk.com, t.me)."
+      );
+      return;
+    }
+
     if (editingEventId) {
       events = events.map((item) =>
         item.id === editingEventId ? eventData : item
@@ -1470,7 +1679,9 @@ async function handleFormSubmit(event) {
 
     await saveEvents();
     await reloadEventsFromStorage();
+    EventFormDraft.clear();
     showModal(false);
+    notifySuccess("Мероприятие сохранено");
 
     const isVisible = getFilteredEvents().some(
       (item) => item.id === eventData.id
@@ -1484,14 +1695,18 @@ async function handleFormSubmit(event) {
         filterState.showPast = true;
       }
     } else if (!isVisible) {
-      alert(
-        "Мероприятие сохранено. Если его не видно — сбросьте поиск, фильтр уровня или «Избранное»."
+      notifyInfo(
+        "Если карточка не видна — сбросьте поиск, фильтр уровня или «Избранное»."
       );
     }
 
     renderCurrentView();
   } catch (error) {
-    setFormError(error.message || "Ошибка сохранения");
+    if (error.message?.includes("отменено")) {
+      notifyInfo(error.message);
+    } else {
+      setFormError(error.message || "Ошибка сохранения");
+    }
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Сохранить";
@@ -1508,14 +1723,14 @@ async function deleteEvent(eventId) {
     await reloadEventsFromStorage();
     renderCurrentView();
   } catch (error) {
-    alert(error.message || "Ошибка удаления");
+    notifyError(error.message || "Ошибка удаления");
   }
 }
 
 async function deleteAllPastEvents() {
   const pastEvents = events.filter(isEventPast);
   if (!pastEvents.length) {
-    alert("Нет прошедших мероприятий для удаления.");
+    notifyInfo("Нет прошедших мероприятий для удаления.");
     return;
   }
 
@@ -1532,9 +1747,9 @@ async function deleteAllPastEvents() {
     await saveEvents();
     await reloadEventsFromStorage();
     renderCurrentView();
-    alert(`Удалено мероприятий: ${count}.`);
+    notifySuccess(`Удалено мероприятий: ${count}.`);
   } catch (error) {
-    alert(error.message || "Ошибка удаления");
+    notifyError(error.message || "Ошибка удаления");
   }
 }
 
@@ -1656,6 +1871,8 @@ function updateAdminUi() {
   updateAdminPreviewToggle();
   const hideAdminToolbar = !isAdmin || viewMode === "attended" || viewMode === "users";
   document.getElementById("adminToolbar")?.classList.toggle("hidden", hideAdminToolbar);
+  document.getElementById("downloadBackupBtn")?.classList.toggle("hidden", !isAdmin);
+  document.getElementById("exportEnrollmentsCsvBtn")?.classList.toggle("hidden", !isAdmin);
   document
     .getElementById("usersRegistryViewBtn")
     ?.classList.toggle("hidden", !isAdmin);
@@ -1763,11 +1980,28 @@ function updateEventsFilterUi() {
   trigger.classList.toggle("filter-menu__trigger--active", parts.length > 0);
 }
 
+function updateSearchClearButton() {
+  const input = document.getElementById("searchInput");
+  const btn = document.getElementById("searchClearBtn");
+  if (!input || !btn) return;
+  const hasValue = Boolean(input.value.trim());
+  btn.classList.toggle("hidden", !hasValue);
+}
+
 function setupFilters() {
   const searchInput = document.getElementById("searchInput");
   searchInput.addEventListener("input", () => {
     filterState.search = searchInput.value;
+    updateSearchClearButton();
     renderCurrentView();
+  });
+
+  document.getElementById("searchClearBtn")?.addEventListener("click", () => {
+    searchInput.value = "";
+    filterState.search = "";
+    updateSearchClearButton();
+    renderCurrentView();
+    searchInput.focus();
   });
 
   const menu = document.getElementById("eventsFilterMenu");
@@ -1834,6 +2068,12 @@ function setupModal() {
   });
 
   document.getElementById("addEventBtn").addEventListener("click", openAddModal);
+  document
+    .getElementById("downloadBackupBtn")
+    ?.addEventListener("click", downloadAppDataBackup);
+  document
+    .getElementById("exportEnrollmentsCsvBtn")
+    ?.addEventListener("click", exportEnrollmentsCsv);
   document
     .getElementById("deleteAllPastBtn")
     ?.addEventListener("click", deleteAllPastEvents);
