@@ -21,6 +21,10 @@ const EVENT_LEVEL_POINTS = {
 const DEFAULT_LOCATION = "ЮРГПУ(НПИ)";
 const DEFAULT_BUTTON_LABEL =
   "Подтвердить участие (перейти в информационный чат)";
+const DEFAULT_FUNCTIONALITY =
+  "Сопровождение концертного зала\nОрганизация работы гардероба";
+const DEFAULT_CONDITIONS =
+  "освобождение от занятий на время проведения мероприятия;\nбаллы для повышенной стипендии;\nверифицированные часы на платформе";
 
 let events = [];
 let enrollments = [];
@@ -1368,6 +1372,8 @@ function openAddModal() {
   document.getElementById("eventLevel").value = "региональный";
   document.getElementById("eventLocation").value = DEFAULT_LOCATION;
   document.getElementById("eventEnrollment").value = "open";
+  document.getElementById("eventFunctionality").value = DEFAULT_FUNCTIONALITY;
+  document.getElementById("eventConditions").value = DEFAULT_CONDITIONS;
   renderScheduleForm([{ date: getTodayDateString(), time: "", timeEnd: "" }]);
   setFormError("");
   showModal(true);
